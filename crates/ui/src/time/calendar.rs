@@ -2,9 +2,9 @@ use std::borrow::Cow;
 
 use chrono::{Datelike, Local, NaiveDate};
 use gpui::{
-    prelude::FluentBuilder as _, px, relative, App, ClickEvent, Context, ElementId, Empty, Entity,
-    EventEmitter, FocusHandle, InteractiveElement, IntoElement, ParentElement, Render, RenderOnce,
-    SharedString, StatefulInteractiveElement, Styled, Window,
+    blue, div, green, prelude::FluentBuilder as _, px, relative, App, ClickEvent, Context,
+    ElementId, Empty, Entity, EventEmitter, FocusHandle, InteractiveElement, IntoElement,
+    ParentElement, Render, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window,
 };
 use rust_i18n::t;
 
@@ -13,7 +13,7 @@ use crate::{
     h_flex, v_flex, ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size,
 };
 
-use super::utils::days_in_month;
+use super::utils::{days_in_month, get_holiday};
 
 pub enum CalendarEvent {
     /// The user selected a date.
@@ -524,7 +524,7 @@ impl Calendar {
     ) -> impl IntoElement {
         let state = self.state.read(cx);
         let (_, month) = state.offset_year_month(offset_month);
-        let day = d.day();
+        let _day = d.day();
         let is_current_month = d.month() == month;
         let is_active = state.date.is_active(d) && is_current_month;
         let is_in_range = state.date.is_in_range(d);
@@ -538,7 +538,8 @@ impl Calendar {
 
         self.item_button(
             d.ordinal() as usize,
-            day.to_string(),
+            // day.to_string(),
+            get_holiday(date),
             is_active,
             is_in_range,
             !is_current_month || disabled,
@@ -547,7 +548,7 @@ impl Calendar {
             cx,
         )
         .when(is_today && !is_active, |this| {
-            this.border_1().border_color(cx.theme().border)
+            this.border_1().border_color(green())
         }) // Add border for today
         .when(!disabled, |this| {
             this.on_click(window.listener_for(
@@ -707,6 +708,11 @@ impl Calendar {
         _: &mut Window,
         cx: &mut App,
     ) -> impl IntoElement + Styled + StatefulInteractiveElement {
+        let label_str = label.into().to_string();
+        let holiday_parts: Vec<&str> = label_str.split(' ').collect();
+        let day = holiday_parts[0].to_string();
+        let holiday = holiday_parts.get(1).unwrap_or(&"").to_string();
+        let flag = holiday_parts.get(2).unwrap_or(&"").to_string();
         h_flex()
             .id(id.into())
             .map(|this| match self.size {
@@ -737,10 +743,39 @@ impl Calendar {
                 })
             })
             .when(active, |this| {
-                this.bg(cx.theme().primary)
-                    .text_color(cx.theme().primary_foreground)
+                // this.bg(cx.theme().primary)
+                // .text_color(cx.theme().primary_foreground)
+                this.border_1().border_color(blue()).rounded(px(20.0))
             })
-            .child(label.into())
+            .child(
+                v_flex()
+                    .text_align(gpui::TextAlign::Center)
+                    .child(
+                        h_flex()
+                            .items_start()
+                            .justify_around()
+                            .gap_1()
+                            .child(div().left(px(3.)).child(day))
+                            .child(
+                                div()
+                                    .top(px(0.))
+                                    .right(px(0.))
+                                    .text_size(px(9.))
+                                    .text_color(gpui::green())
+                                    .child(flag.clone())
+                                    .when(flag == "班", |this| this.text_color(gpui::red())),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .top(px(-5.))
+                            .text_color(cx.theme().muted_foreground)
+                            .text_size(px(9.))
+                            .child(holiday.clone())
+                            .when(holiday.len() > 6, |this| this.text_color(gpui::green()))
+                            .when(flag == "班", |this| this.text_color(gpui::red())),
+                    ),
+            )
     }
 
     fn render_days(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
