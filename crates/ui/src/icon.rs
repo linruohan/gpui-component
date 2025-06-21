@@ -235,7 +235,7 @@ impl Icon {
         icon.into()
     }
 
-    fn build(name: IconName) -> Self {
+    pub fn build(name: IconName) -> Self {
         Self::default().path(name.path())
     }
 
