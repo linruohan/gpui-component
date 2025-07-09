@@ -6,9 +6,6 @@ use gpui::{
     ElementId, Empty, Entity, EventEmitter, FocusHandle, InteractiveElement, IntoElement,
     ParentElement, Render, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement,
     Styled, Window,
-    prelude::FluentBuilder as _, px, relative, App, ClickEvent, Context, ElementId, Empty, Entity,
-    EventEmitter, FocusHandle, InteractiveElement, IntoElement, ParentElement, Render, RenderOnce,
-    SharedString, StatefulInteractiveElement, Styled, Window,
 };
 use rust_i18n::t;
 
