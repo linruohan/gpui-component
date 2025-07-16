@@ -1,1 +1,1 @@
-git fetch long ;git checkout main;git rebase long/main
+git fetch long ;git checkout main;git merge long/main
