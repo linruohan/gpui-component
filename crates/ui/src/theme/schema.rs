@@ -1,28 +1,47 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 use gpui::{Hsla, SharedString};
 use palette::FromColor as _;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{Colorize, Theme, ThemeColor, ThemeMode};
+use crate::{
+    highlighter::{HighlightTheme, HighlightThemeStyle},
+    Colorize, Theme, ThemeColor, ThemeMode,
+};
 
 /// Represents a theme configuration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
-pub struct ThemeConfig {
-    /// The name of the theme.
+pub struct ThemeSet {
+    /// The name of the theme set.
     pub name: SharedString,
     /// The author of the theme.
     pub author: Option<SharedString>,
     /// The URL of the theme.
     pub url: Option<SharedString>,
-    /// The mode of the theme, default is light.
-    pub mode: ThemeMode,
+
     /// The base font size, default is 16.
     #[serde(rename = "font.size")]
     pub font_size: Option<f32>,
+
+    #[serde(rename = "themes")]
+    pub themes: Vec<ThemeConfig>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct ThemeConfig {
+    /// The name of the theme.
+    pub name: SharedString,
+    /// The mode of the theme, default is light.
+    pub mode: ThemeMode,
     /// The colors of the theme.
     pub colors: ThemeConfigColors,
+    /// The highlight theme, this part is combilbility with `style` section in Zed theme.
+    ///
+    /// https://github.com/zed-industries/zed/blob/f50041779dcfd7a76c8aec293361c60c53f02d51/assets/themes/ayu/ayu.json#L9
+    pub highlight: Option<HighlightThemeStyle>,
 }
 
 #[derive(Debug, Default, Clone, JsonSchema, Serialize, Deserialize)]
@@ -401,6 +420,8 @@ impl Theme {
             };
         }
 
+        self.mode = config.mode;
+
         // Base colors for fallback
         apply_color!(red);
         apply_color!(red_light, fallback = self.red.opacity(0.8));
@@ -417,15 +438,15 @@ impl Theme {
         apply_color!(border);
         apply_color!(foreground);
         apply_color!(muted);
-        apply_color!(muted_foreground);
+        apply_color!(muted_foreground, fallback = self.foreground.opacity(0.7));
         apply_color!(primary);
-        apply_color!(primary_active);
-        apply_color!(primary_foreground);
-        apply_color!(primary_hover);
+        apply_color!(primary_active, fallback = self.primary.darken(0.1));
+        apply_color!(primary_foreground, fallback = self.foreground);
+        apply_color!(primary_hover, fallback = self.primary.opacity(0.9));
         apply_color!(secondary);
-        apply_color!(secondary_active);
-        apply_color!(secondary_foreground);
-        apply_color!(secondary_hover);
+        apply_color!(secondary_active, fallback = self.secondary.darken(0.1));
+        apply_color!(secondary_foreground, fallback = self.foreground);
+        apply_color!(secondary_hover, fallback = self.secondary.opacity(0.9));
 
         // Other colors
         apply_color!(accent, fallback = self.secondary);
@@ -441,21 +462,21 @@ impl Theme {
         apply_color!(chart_3, fallback = self.blue);
         apply_color!(chart_4, fallback = self.blue.darken(0.2));
         apply_color!(chart_5, fallback = self.blue.darken(0.4));
-        apply_color!(danger);
-        apply_color!(danger_active, fallback = self.danger);
-        apply_color!(danger_foreground);
-        apply_color!(danger_hover, fallback = self.danger);
-        apply_color!(description_list_label, fallback = self.secondary);
+        apply_color!(danger, fallback = self.red);
+        apply_color!(danger_active, fallback = self.danger.darken(0.1));
+        apply_color!(danger_foreground, fallback = self.primary_foreground);
+        apply_color!(danger_hover, fallback = self.danger.opacity(0.9));
+        apply_color!(description_list_label, fallback = self.border.opacity(0.2));
         apply_color!(
             description_list_label_foreground,
             fallback = self.secondary_foreground
         );
         apply_color!(drag_border, fallback = self.primary.opacity(0.65));
         apply_color!(drop_target, fallback = self.primary.opacity(0.2));
-        apply_color!(info);
-        apply_color!(info_active);
-        apply_color!(info_foreground);
-        apply_color!(info_hover);
+        apply_color!(info, fallback = self.cyan);
+        apply_color!(info_active, fallback = self.info.darken(0.1));
+        apply_color!(info_foreground, fallback = self.primary_foreground);
+        apply_color!(info_hover, fallback = self.info.opacity(0.9));
         apply_color!(input, fallback = self.border);
         apply_color!(link, fallback = self.primary);
         apply_color!(link_active, fallback = self.link);
@@ -487,10 +508,10 @@ impl Theme {
         apply_color!(skeleton, fallback = self.secondary);
         apply_color!(slider_bar, fallback = self.primary);
         apply_color!(slider_thumb, fallback = self.primary_foreground);
-        apply_color!(success);
-        apply_color!(success_foreground);
-        apply_color!(success_hover);
-        apply_color!(success_active);
+        apply_color!(success, fallback = self.green);
+        apply_color!(success_foreground, fallback = self.primary_foreground);
+        apply_color!(success_hover, fallback = self.success.opacity(0.9));
+        apply_color!(success_active, fallback = self.success.darken(0.1));
         apply_color!(switch, fallback = self.secondary);
         apply_color!(tab, fallback = self.background);
         apply_color!(tab_active, fallback = self.background);
@@ -509,12 +530,14 @@ impl Theme {
         apply_color!(title_bar, fallback = self.background);
         apply_color!(title_bar_border, fallback = self.border);
         apply_color!(tiles, fallback = self.background);
-        apply_color!(warning);
-        apply_color!(warning_active);
-        apply_color!(warning_hover);
-        apply_color!(warning_foreground);
+        apply_color!(warning, fallback = self.yellow);
+        apply_color!(warning_active, fallback = self.warning.darken(0.1));
+        apply_color!(warning_hover, fallback = self.warning.opacity(0.9));
+        apply_color!(warning_foreground, fallback = self.primary_foreground);
         apply_color!(overlay);
         apply_color!(window_border, fallback = self.border);
+
+        // TODO: Apply default fallback colors to highlight.
 
         // Ensure opacity for list_active, table_active
         self.colors.list_active = self.colors.list_active.alpha(0.2);
@@ -524,6 +547,20 @@ impl Theme {
             self.dark_theme = self.colors;
         } else {
             self.light_theme = self.colors;
+        }
+
+        if let Some(style) = &config.highlight {
+            let highlight_theme = Arc::new(HighlightTheme {
+                name: config.name.to_string(),
+                appearance: self.mode,
+                style: style.clone(),
+            });
+            self.highlight_theme = highlight_theme.clone();
+            if config.mode.is_dark() {
+                self.dark_highlight_theme = highlight_theme;
+            } else {
+                self.light_highlight_theme = highlight_theme;
+            }
         }
     }
 }

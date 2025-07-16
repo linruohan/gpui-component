@@ -8,11 +8,7 @@ use gpui::{
 };
 use markdown::mdast;
 
-use crate::{
-    h_flex,
-    highlighter::{LanguageRegistry, SyntaxHighlighter},
-    v_flex, ActiveTheme as _, Icon, IconName,
-};
+use crate::{h_flex, highlighter::SyntaxHighlighter, v_flex, ActiveTheme as _, Icon, IconName};
 
 use super::{utils::list_item_prefix, TextViewStyle};
 
@@ -236,9 +232,7 @@ impl CodeBlock {
         _: &TextViewStyle,
         cx: &mut App,
     ) -> Self {
-        let theme = LanguageRegistry::global(cx)
-            .theme(cx.theme().is_dark())
-            .clone();
+        let theme = cx.theme().highlight_theme.clone();
         let mut styles = vec![];
         if let Some(lang) = &lang {
             let mut highlighter = SyntaxHighlighter::new(&lang, cx);
@@ -263,7 +257,9 @@ pub enum Node {
         level: u8,
         children: Paragraph,
     },
-    Blockquote(Paragraph),
+    Blockquote {
+        children: Vec<Node>,
+    },
     List {
         /// Only contains ListItem, others will be ignored
         children: Vec<Node>,
@@ -670,14 +666,20 @@ impl Node {
                     .child(children)
                     .into_any_element()
             }
-            Node::Blockquote(children) => div()
+            Node::Blockquote { children } => div()
                 .w_full()
                 .mb(mb)
                 .text_color(cx.theme().muted_foreground)
                 .border_l_3()
                 .border_color(cx.theme().secondary_active)
                 .px_4()
-                .child(children)
+                .children({
+                    let children_len = children.len();
+                    children.into_iter().enumerate().map(move |(index, c)| {
+                        let is_last_child = is_root && index == children_len - 1;
+                        c.render(None, false, is_last_child, style, window, cx)
+                    })
+                })
                 .into_any_element(),
             Node::List { children, ordered } => v_flex()
                 .mb(mb)
@@ -789,8 +791,13 @@ impl Node {
                 let hashes = "#".repeat(*level as usize);
                 format!("{} {}", hashes, children.to_markdown())
             }
-            Node::Blockquote(paragraph) => {
-                let content = paragraph.to_markdown();
+            Node::Blockquote { children } => {
+                let content = children
+                    .iter()
+                    .map(|child| child.to_markdown())
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+
                 content
                     .lines()
                     .map(|line| format!("> {}", line))

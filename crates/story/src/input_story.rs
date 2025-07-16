@@ -4,11 +4,7 @@ use gpui::{
 };
 
 use crate::{section, Tab, TabPrev};
-use gpui_component::{
-    button::{Button, ButtonVariants as _},
-    input::{InputEvent, InputState, MaskPattern, TextInput},
-    v_flex, ContextModal, FocusableCycle, Icon, IconName, Sizable,
-};
+use gpui_component::{button::*, input::*, *};
 
 const CONTEXT: &str = "InputStory";
 
@@ -33,6 +29,7 @@ pub struct InputStory {
     phone_input: Entity<InputState>,
     mask_input2: Entity<InputState>,
     currency_input: Entity<InputState>,
+    custom_input: Entity<InputState>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -94,6 +91,8 @@ impl InputStory {
                 fraction: Some(3),
             })
         });
+        let custom_input =
+            cx.new(|cx| InputState::new(window, cx).placeholder("here is a custom input"));
 
         let _subscriptions = vec![
             cx.subscribe_in(&input1, window, Self::on_input_event),
@@ -120,6 +119,7 @@ impl InputStory {
             phone_input,
             mask_input2,
             currency_input,
+            custom_input,
             _subscriptions,
         }
     }
@@ -270,6 +270,19 @@ impl Render for InputStory {
                         "Value: {:?}",
                         window.focused_input(cx).map(|input| input.read(cx).value())
                     ))),
+            )
+            .child(
+                section("Appearance false").max_w_md().child(
+                    div()
+                        .border_b_2()
+                        .px_6()
+                        .py_3()
+                        .border_color(cx.theme().border)
+                        .bg(cx.theme().secondary)
+                        .text_color(cx.theme().secondary_foreground)
+                        .w_full()
+                        .child(TextInput::new(&self.custom_input).appearance(false)),
+                ),
             )
     }
 }

@@ -1494,9 +1494,6 @@ impl InputState {
         if self.marked_range.is_some() {
             self.unmark_text(window, cx);
         }
-        if self.selected_range.len() > 0 {
-            return self.unselect(window, cx);
-        }
 
         if self.clean_on_escape {
             return self.clean(window, cx);
@@ -1904,8 +1901,9 @@ impl InputState {
         cx.notify()
     }
 
-    fn unselect(&mut self, _: &mut Window, cx: &mut Context<Self>) {
-        let offset = self.next_boundary(self.cursor().offset);
+    /// Unselects the currently selected text.
+    pub fn unselect(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        let offset = self.cursor().offset;
         self.selected_range = (offset..offset).into();
         cx.notify()
     }
@@ -1965,7 +1963,9 @@ impl InputState {
 
     /// Returns the true to let InputElement to render cursor, when Input is focused and current BlinkCursor is visible.
     pub(crate) fn show_cursor(&self, window: &Window, cx: &App) -> bool {
-        self.focus_handle.is_focused(window) && self.blink_cursor.read(cx).visible()
+        self.focus_handle.is_focused(window)
+            && self.blink_cursor.read(cx).visible()
+            && window.is_window_active()
     }
 
     fn on_focus(&mut self, _: &mut Window, cx: &mut Context<Self>) {
@@ -1976,7 +1976,6 @@ impl InputState {
     }
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.unselect(window, cx);
         self.blink_cursor.update(cx, |cursor, cx| {
             cursor.stop(cx);
         });

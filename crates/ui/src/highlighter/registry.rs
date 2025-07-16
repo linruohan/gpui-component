@@ -1,20 +1,17 @@
 use gpui::{App, FontWeight, HighlightStyle, Hsla};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    ops::Deref,
-    sync::{Arc, LazyLock},
-};
+use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::{collections::HashMap, ops::Deref, sync::LazyLock};
 
 use super::LanguageConfig;
-use crate::{highlighter::languages, ThemeMode};
+use crate::{
+    highlighter::{languages, Language},
+    ThemeMode,
+};
 
 pub(super) fn init(cx: &mut App) {
-    let mut register = LanguageRegistry::new();
-    for language in languages::Language::all() {
-        register.register(language.name(), &language.config());
-    }
+    let register = LanguageRegistry::new();
 
     cx.set_global(register);
 }
@@ -139,6 +136,7 @@ pub struct SyntaxColors {
 pub enum FontStyle {
     Normal,
     Italic,
+    Underline,
 }
 
 impl From<FontStyle> for gpui::FontStyle {
@@ -146,6 +144,37 @@ impl From<FontStyle> for gpui::FontStyle {
         match style {
             FontStyle::Normal => gpui::FontStyle::Normal,
             FontStyle::Italic => gpui::FontStyle::Italic,
+            FontStyle::Underline => gpui::FontStyle::Normal,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, Serialize_repr, Deserialize_repr, JsonSchema)]
+#[repr(u16)]
+pub enum FontWeightContent {
+    Thin = 100,
+    ExtraLight = 200,
+    Light = 300,
+    Normal = 400,
+    Medium = 500,
+    Semibold = 600,
+    Bold = 700,
+    ExtraBold = 800,
+    Black = 900,
+}
+
+impl From<FontWeightContent> for FontWeight {
+    fn from(value: FontWeightContent) -> Self {
+        match value {
+            FontWeightContent::Thin => FontWeight::THIN,
+            FontWeightContent::ExtraLight => FontWeight::EXTRA_LIGHT,
+            FontWeightContent::Light => FontWeight::LIGHT,
+            FontWeightContent::Normal => FontWeight::NORMAL,
+            FontWeightContent::Medium => FontWeight::MEDIUM,
+            FontWeightContent::Semibold => FontWeight::SEMIBOLD,
+            FontWeightContent::Bold => FontWeight::BOLD,
+            FontWeightContent::ExtraBold => FontWeight::EXTRA_BOLD,
+            FontWeightContent::Black => FontWeight::BLACK,
         }
     }
 }
@@ -154,14 +183,14 @@ impl From<FontStyle> for gpui::FontStyle {
 pub struct ThemeStyle {
     color: Option<Hsla>,
     font_style: Option<FontStyle>,
-    font_weight: Option<FontWeight>,
+    font_weight: Option<FontWeightContent>,
 }
 
 impl From<ThemeStyle> for HighlightStyle {
     fn from(style: ThemeStyle) -> Self {
         HighlightStyle {
             color: style.color,
-            font_weight: style.font_weight,
+            font_weight: style.font_weight.map(Into::into),
             font_style: style.font_style.map(Into::into),
             ..Default::default()
         }
@@ -379,8 +408,6 @@ pub struct HighlightThemeStyle {
 pub struct HighlightTheme {
     pub name: String,
     #[serde(default)]
-    pub author: String,
-    #[serde(default)]
     pub appearance: ThemeMode,
     pub style: HighlightThemeStyle,
 }
@@ -407,8 +434,6 @@ impl HighlightTheme {
 #[derive(Clone)]
 pub struct LanguageRegistry {
     languages: HashMap<String, LanguageConfig>,
-    pub(crate) light_theme: Arc<HighlightTheme>,
-    pub(crate) dark_theme: Arc<HighlightTheme>,
 }
 
 impl gpui::Global for LanguageRegistry {}
@@ -422,30 +447,21 @@ impl LanguageRegistry {
         cx.global_mut::<LanguageRegistry>()
     }
 
+    /// Create a new language registry with default languages and themes.
     pub fn new() -> Self {
-        Self {
+        let mut registry = Self {
             languages: HashMap::new(),
-            light_theme: Arc::new(HighlightTheme::default_light()),
-            dark_theme: Arc::new(HighlightTheme::default_dark()),
+        };
+
+        for language in languages::Language::all() {
+            registry.register(language.name(), &language.config());
         }
+
+        registry
     }
 
     pub fn register(&mut self, lang: &str, config: &LanguageConfig) {
         self.languages.insert(lang.to_string(), config.clone());
-    }
-
-    /// Set highlighter theme.
-    pub fn set_theme(&mut self, light: &HighlightTheme, dark: &HighlightTheme) {
-        self.light_theme = Arc::new(light.clone());
-        self.dark_theme = Arc::new(dark.clone());
-    }
-
-    pub(crate) fn theme(&self, is_dark: bool) -> &Arc<HighlightTheme> {
-        if is_dark {
-            &self.dark_theme
-        } else {
-            &self.light_theme
-        }
     }
 
     /// Returns a reference to the map of registered languages.
@@ -455,13 +471,22 @@ impl LanguageRegistry {
 
     /// Returns the language configuration for the given language name.
     pub fn language(&self, name: &str) -> Option<&LanguageConfig> {
-        self.languages.get(name)
+        // Try to get by name first, there may have a custom language registered
+        if let Some(language) = self.languages.get(name) {
+            return Some(language);
+        }
+
+        // Then try to get built-in language to support short language names, e.g. "js" for "javascript"
+        let language = Language::from_str(name);
+        self.languages.get(language.name())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use gpui::rgb;
+
+    use crate::highlighter::LanguageConfig;
 
     #[test]
     fn test_syntax_colors() {
@@ -474,5 +499,22 @@ mod tests {
         assert_eq!(syntax.style("keyword"), Some(rgb(0x0433ff).into()));
         assert_eq!(syntax.style("keyword.repeat"), Some(rgb(0x0433ff).into()));
         assert_eq!(syntax.style("foo"), None);
+    }
+
+    #[test]
+    fn test_registry() {
+        use super::LanguageRegistry;
+        let mut registry = LanguageRegistry::new();
+
+        registry.register(
+            "foo",
+            &LanguageConfig::new("foo", tree_sitter_bash::LANGUAGE.into(), vec![], "", "", ""),
+        );
+
+        assert!(registry.language("foo").is_some());
+        assert!(registry.language("rust").is_some());
+        assert!(registry.language("rs").is_some());
+        assert!(registry.language("javascript").is_some());
+        assert!(registry.language("js").is_some());
     }
 }
