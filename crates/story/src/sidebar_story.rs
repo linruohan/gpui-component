@@ -308,7 +308,8 @@ impl Render for SidebarStory {
                             }),
                     )
                     .child(
-                        SidebarGroup::new("Platform").child(SidebarMenu::new().children(
+                        SidebarGroup::new("Platform").child(
+                            SidebarMenu::new().children(
                             groups[0].iter().map(|item| {
                                 SidebarMenuItem::new(item.label())
                                     .icon(item.icon())
