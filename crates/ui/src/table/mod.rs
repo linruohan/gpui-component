@@ -1001,7 +1001,7 @@ where
                             .children(
                                 self.col_groups
                                     .iter()
-                                    .filter(|col| col.column.fixed == None)
+                                    .skip(left_columns_count)
                                     .enumerate()
                                     .map(|(col_ix, _)| {
                                         self.render_th(left_columns_count + col_ix, window, cx)
@@ -1093,7 +1093,7 @@ where
                                 Axis::Horizontal,
                                 col_sizes,
                                 {
-                                    move |table, visible_range: Range<usize>, _, window, cx| {
+                                    move |table, visible_range: Range<usize>, window, cx| {
                                         table.update_visible_range_if_need(
                                             visible_range.clone(),
                                             Axis::Horizontal,
