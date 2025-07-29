@@ -73,10 +73,16 @@ pub struct SidebarBoardItem {
 
 impl SidebarBoardItem {
     /// Create a new SidebarBoardItem with a label
-    pub fn new(label: impl Into<SharedString>, bg: Hsla, color: Hsla, count: usize) -> Self {
+    pub fn new(
+        label: impl Into<SharedString>,
+        bg: Hsla,
+        color: Hsla,
+        count: usize,
+        icon_name: IconName,
+    ) -> Self {
         Self {
             id: ElementId::Integer(0),
-            icon: None,
+            icon: Some(Icon::from(icon_name)),
             label: label.into(),
             handler: Rc::new(|_, _, _| {}),
             active: false,
@@ -165,14 +171,21 @@ impl RenderOnce for SidebarBoardItem {
             .gap_2()
             .p_2()
             .w_full()
+            .when(is_active, |this| {
+                this.border_1()
+                    .border_color(self.board_text_color)
+                    .bg(cx.theme().sidebar_accent)
+            })
+            // .bg(self.board_bg.darken(10.0))
             .justify_between()
+            .opacity(0.8)
             .rounded(cx.theme().radius)
             .hover(|this| {
                 this.bg(cx.theme().sidebar_accent)
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
             .size(size)
-            .bg(self.board_bg.opacity(0.15))
+            .bg(self.board_bg.darken(0.85))
             .rounded(cx.theme().radius)
             .child(
                 v_flex()
@@ -216,26 +229,15 @@ impl RenderOnce for SidebarBoardItem {
                                 div().flex().justify_between().children([
                                     div().child(
                                         Label::new(self.label.clone())
-                                            .size(Length::Definite(gpui::DefiniteLength::Fraction(
-                                                0.5,
-                                            )))
                                             .text_left()
                                             .text_color(board_text_color),
                                     ), // 左下角
                                     div()
                                         .when(is_active, |this| {
-                                            this.child(
-                                                Label::new("🔴")
-                                                    .text_right()
-                                                    .text_color(board_text_color),
-                                            )
+                                            this.child(Label::new("🔴").text_right())
                                         })
                                         .when(!is_active, |this| {
-                                            this.child(
-                                                Label::new("")
-                                                    .text_right()
-                                                    .text_color(board_text_color),
-                                            )
+                                            this.child(Label::new("").text_right())
                                         }), // 右下角
                                 ]),
                             ])
