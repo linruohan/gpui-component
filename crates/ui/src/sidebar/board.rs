@@ -1,4 +1,5 @@
-use crate::{h_flex, label::Label, v_flex, ActiveTheme as _, Collapsible, Icon};
+use crate::theme::color::Colorize;
+use crate::{h_flex, label::Label, v_flex, ActiveTheme as _, Collapsible, Icon, IconName};
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, AnyElement, App, ClickEvent, ElementId, Hsla,
     InteractiveElement as _, IntoElement, Length, ParentElement as _, RenderOnce, SharedString,
