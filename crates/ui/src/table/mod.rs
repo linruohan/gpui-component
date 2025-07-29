@@ -856,6 +856,7 @@ where
         let name = col_group.column.name.clone();
 
         h_flex()
+            .h_full()
             .child(
                 self.render_cell(col_ix, window, cx)
                     .id(("col-header", col_ix))
