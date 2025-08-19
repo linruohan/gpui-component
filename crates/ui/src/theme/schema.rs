@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 use anyhow::Result;
 use gpui::{Hsla, SharedString};
@@ -32,6 +32,8 @@ pub struct ThemeSet {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct ThemeConfig {
+    /// Whether this theme is the default theme.
+    pub is_default: bool,
     /// The name of the theme.
     pub name: SharedString,
     /// The mode of the theme, default is light.
@@ -67,12 +69,15 @@ pub struct ThemeConfigColors {
     /// Default border color
     #[serde(rename = "border")]
     pub border: Option<SharedString>,
-    /// Background color for Card.
-    #[serde(rename = "card.background")]
-    pub card: Option<SharedString>,
-    /// Text color for Card.
-    #[serde(rename = "card.foreground")]
-    pub card_foreground: Option<SharedString>,
+    /// Background color for GroupBox.
+    #[serde(rename = "group_box.background")]
+    pub group_box: Option<SharedString>,
+    /// Text color for GroupBox.
+    #[serde(rename = "group_box.foreground")]
+    pub group_box_foreground: Option<SharedString>,
+    /// Title text color for GroupBox.
+    #[serde(rename = "group_box.title.foreground")]
+    pub group_box_title_foreground: Option<SharedString>,
     /// Input caret color (Blinking cursor).
     #[serde(rename = "caret")]
     pub caret: Option<SharedString>,
@@ -376,15 +381,10 @@ fn try_parse_color(color: &str) -> Result<Hsla> {
     Ok(rgba.into())
 }
 
-impl Theme {
-    /// Apply the given theme configuration to the current theme.
-    pub fn apply_config(&mut self, config: &ThemeConfig) {
+impl ThemeColor {
+    /// Create a new `ThemeColor` from a `ThemeConfig`.
+    pub(crate) fn apply_config(&mut self, config: &ThemeConfig, default_theme: &ThemeColor) {
         let colors = config.colors.clone();
-        let default_theme = if config.mode.is_dark() {
-            ThemeColor::dark()
-        } else {
-            ThemeColor::light()
-        };
 
         macro_rules! apply_color {
             ($config_field:ident) => {
@@ -409,8 +409,6 @@ impl Theme {
                 }
             };
         }
-
-        self.mode = config.mode;
 
         // Base colors for fallback
         apply_color!(red);
@@ -446,8 +444,8 @@ impl Theme {
         apply_color!(accordion, fallback = self.background);
         apply_color!(accordion_active, fallback = self.accordion);
         apply_color!(accordion_hover, fallback = self.accordion);
-        apply_color!(card, fallback = self.background);
-        apply_color!(card_foreground, fallback = self.foreground);
+        apply_color!(group_box, fallback = self.secondary);
+        apply_color!(group_box_foreground, fallback = self.secondary_foreground);
         apply_color!(caret, fallback = self.primary);
         apply_color!(chart_1, fallback = self.blue.lighten(0.4));
         apply_color!(chart_2, fallback = self.blue.lighten(0.2));
@@ -532,15 +530,19 @@ impl Theme {
         // TODO: Apply default fallback colors to highlight.
 
         // Ensure opacity for list_active, table_active
-        self.colors.list_active = self.colors.list_active.alpha(0.2);
-        self.colors.table_active = self.colors.table_active.alpha(0.2);
+        self.list_active = self.list_active.alpha(0.2);
+        self.table_active = self.table_active.alpha(0.2);
+    }
+}
 
+impl Theme {
+    /// Apply the given theme configuration to the current theme.
+    pub fn apply_config(&mut self, config: &Rc<ThemeConfig>) {
         if config.mode.is_dark() {
-            self.dark_theme = self.colors;
+            self.dark_theme = config.clone();
         } else {
-            self.light_theme = self.colors;
+            self.light_theme = config.clone();
         }
-
         if let Some(style) = &config.highlight {
             let highlight_theme = Arc::new(HighlightTheme {
                 name: config.name.to_string(),
@@ -548,12 +550,15 @@ impl Theme {
                 style: style.clone(),
             });
             self.highlight_theme = highlight_theme.clone();
-            if config.mode.is_dark() {
-                self.dark_highlight_theme = highlight_theme;
-            } else {
-                self.light_highlight_theme = highlight_theme;
-            }
         }
+
+        let default_theme = if config.mode.is_dark() {
+            ThemeColor::dark()
+        } else {
+            ThemeColor::light()
+        };
+
+        self.colors.apply_config(&config, &default_theme);
     }
 }
 
