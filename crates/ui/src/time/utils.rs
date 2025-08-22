@@ -109,11 +109,11 @@ pub fn get_holiday(date: NaiveDate) -> String {
         format!(
             "{} {}",
             date.day(),
-            if jieqi.is_jie() {
-                lunar_day_name
-            } else {
-                jieqi.to_string()
-            }
+            lunar_day_name // if jieqi.is_jie() {
+                           //     lunar_day_name
+                           // } else {
+                           //     jieqi.to_string()
+                           // }
         )
     }
 }
