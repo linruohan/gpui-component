@@ -73,7 +73,7 @@ uuid = "1.10"
 # WebView
 wry = { version = "0.48.0", optional = true }
 palette = "0.7.6"
-lunar_rust = { git = "https://github.com/linruohan/lunar_rust" }
+tyme4rs = { git = "https://github.com/linruohan/tyme4rs.git" }
 
 
 # SvgImg

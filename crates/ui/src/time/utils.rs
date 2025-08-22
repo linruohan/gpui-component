@@ -85,33 +85,37 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
     days
 }
 
-pub(crate) fn get_holiday(date: NaiveDate) -> String {
-    // 普通日："15 十五"
-    // 节假日："1 休 元旦"
-    // 调班日："4 班 清明节调班"
-    use chrono::Datelike;
-    use lunar_rust::{
-        holiday::HolidayRefHelper,
-        lunar::LunarRefHelper,
-        solar::{self, SolarRefHelper},
-        util::holiday_util::{self, HolidayUtilRefHelper},
-    };
-    let lunar = solar::from_date(date.and_hms_opt(0, 0, 0).unwrap()).get_lunar();
-    format!(
-        "{} {}",
-        date.day(),
-        holiday_util::get()
-            .get_holiday(
-                date.year() as i64,
-                Some(date.month() as i64),
-                Some(date.day() as i64)
-            )
-            .map_or(lunar.get_day_in_chinese(), |h| format!(
-                "{} {}",
-                h.get_name(),
-                if h.is_work() { "班" } else { "休" },
-            ))
-    )
+pub fn get_holiday(date: NaiveDate) -> String {
+    use tyme4rs::tyme::{holiday::LEGAL_HOLIDAY_NAMES, lunar::LUNAR_DAY_NAMES, solar::SolarDay};
+
+    let solar_day = SolarDay::from_ymd(
+        date.year() as isize,
+        date.month() as usize,
+        date.day() as usize,
+    );
+
+    if let Some(holiday) = solar_day.get_legal_holiday() {
+        format!(
+            "{} {} {}",
+            date.day(),
+            LEGAL_HOLIDAY_NAMES[holiday.get_index()],
+            if holiday.is_work() { "班" } else { "休" }
+        )
+    } else {
+        let lunar = solar_day.get_lunar_day();
+        let lunar_day_name = LUNAR_DAY_NAMES[lunar.get_day() - 1].to_string();
+        let jieqi = solar_day.get_term().to_string();
+
+        format!(
+            "{} {}",
+            date.day(),
+            if jieqi.is_empty() {
+                lunar_day_name
+            } else {
+                jieqi
+            }
+        )
+    }
 }
 #[cfg(test)]
 mod tests {
