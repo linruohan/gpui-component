@@ -104,15 +104,15 @@ pub fn get_holiday(date: NaiveDate) -> String {
     } else {
         let lunar = solar_day.get_lunar_day();
         let lunar_day_name = LUNAR_DAY_NAMES[lunar.get_day() - 1].to_string();
-        let jieqi = solar_day.get_term().to_string();
+        let jieqi = solar_day.get_term();
 
         format!(
             "{} {}",
             date.day(),
-            if jieqi.is_empty() {
+            if jieqi.is_jie() {
                 lunar_day_name
             } else {
-                jieqi
+                jieqi.to_string()
             }
         )
     }
