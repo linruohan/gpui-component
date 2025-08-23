@@ -85,10 +85,9 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
     days
 }
 pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
-    // 可以获取准确的节气信息
     // 普通日："15 十五"
-    // 节假日："1 元旦 休"
-    // 调班日："4 清明节调班 班"
+    // 节假日："1 休 元旦"
+    // 调班日："4 班 清明节调班"
     use chrono::Datelike;
     use lunar_rust::{
         holiday::HolidayRefHelper,
@@ -106,7 +105,7 @@ pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
     match holiday_info {
         Some(holiday) => {
             let work_status = if holiday.is_work() { "班" } else { "休" };
-            format!("{} {} {}", date.day(), work_status, holiday.get_name())
+            format!("{} {} {}", date.day(), holiday.get_name(), work_status)
         }
         None => {
             let day_in_chinese = lunar.get_day_in_chinese();
