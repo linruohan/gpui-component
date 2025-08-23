@@ -15,7 +15,7 @@ use crate::{
     StyledExt as _,
 };
 
-use super::utils::{days_in_month, get_holiday};
+use super::utils::{days_in_month, get_holiday_by_lunar_rust};
 
 pub enum CalendarEvent {
     /// The user selected a date.
@@ -548,7 +548,7 @@ impl Calendar {
         self.item_button(
             d.ordinal() as usize,
             // day.to_string(),
-            get_holiday(date),
+            get_holiday_by_lunar_rust(date),
             is_active,
             is_in_range,
             !is_current_month || disabled,

@@ -84,8 +84,46 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 
     days
 }
-
-pub fn get_holiday(date: NaiveDate) -> String {
+pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
+    // 可以获取准确的节气信息
+    // 普通日："15 十五"
+    // 节假日："1 元旦 休"
+    // 调班日："4 清明节调班 班"
+    use chrono::Datelike;
+    use lunar_rust::{
+        holiday::HolidayRefHelper,
+        lunar::LunarRefHelper,
+        solar::{self, SolarRefHelper},
+        util::holiday_util::{self, HolidayUtilRefHelper},
+    };
+    let lunar = solar::from_date(date.and_hms_opt(0, 0, 0).unwrap()).get_lunar();
+    let jie_qi = lunar.get_jie_qi();
+    let holiday_info = holiday_util::get().get_holiday(
+        date.year() as i64,
+        Some(date.month() as i64),
+        Some(date.day() as i64),
+    );
+    match holiday_info {
+        Some(holiday) => {
+            let work_status = if holiday.is_work() { "班" } else { "休" };
+            format!("{} {} {}", date.day(), work_status, holiday.get_name())
+        }
+        None => {
+            let day_in_chinese = lunar.get_day_in_chinese();
+            format!(
+                "{} {}",
+                date.day(),
+                if jie_qi.is_empty() {
+                    day_in_chinese
+                } else {
+                    jie_qi
+                }
+            )
+        }
+    }
+}
+pub fn get_holiday_by_tyme4rs(date: NaiveDate) -> String {
+    // 使用tyme4rs获取，但是节气信息不准确
     use tyme4rs::tyme::{holiday::LEGAL_HOLIDAY_NAMES, lunar::LUNAR_DAY_NAMES, solar::SolarDay};
 
     let solar_day = SolarDay::from_ymd(
