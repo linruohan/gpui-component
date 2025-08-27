@@ -773,7 +773,9 @@ impl Calendar {
                                 div()
                                     .left(px(3.))
                                     .child(day)
-                                    .when(jieqi_list.contains(day), |this| this.text_color(blue())),
+                                    .when(jieqi_list.contains(&day), |this| {
+                                        this.text_color(blue())
+                                    }),
                             )
                             .child(
                                 div()
