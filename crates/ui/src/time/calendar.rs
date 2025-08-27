@@ -10,6 +10,7 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
+    blue_500,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex, ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size,
     StyledExt as _,
@@ -787,7 +788,7 @@ impl Calendar {
                             .text_size(px(9.))
                             .child(holiday.clone())
                             .when(jieqi_list.iter().any(|jieqi| jieqi == &holiday), |this| {
-                                this.text_color(blue())
+                                this.text_color(blue_500())
                             })
                             .when(holiday.len() > 6, |this| this.text_color(gpui::green()))
                             .when(flag == "班", |this| this.text_color(gpui::red())),
