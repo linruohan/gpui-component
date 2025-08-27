@@ -772,8 +772,8 @@ impl Calendar {
                             .child(
                                 div()
                                     .left(px(3.))
-                                    .child(day)
-                                    .when(jieqi_list.contains(day.clone().as_str()), |this| {
+                                    .child(day.clone())
+                                    .when(jieqi_list.iter().any(|jieqi| jieqi == &day), |this| {
                                         this.text_color(blue())
                                     }),
                             )
