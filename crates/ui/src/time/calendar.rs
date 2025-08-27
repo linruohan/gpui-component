@@ -727,7 +727,6 @@ impl Calendar {
             "芒种", "夏至", "小暑", "大暑", "立秋", "处暑", "白露", "秋分", "寒露", "霜降", "立冬",
             "小雪", "大雪",
         ];
-        println!("{day} {holiday} {flag}");
         h_flex()
             .id(id.into())
             .map(|this| match self.size {
@@ -770,14 +769,7 @@ impl Calendar {
                             .items_start()
                             .justify_around()
                             .gap_1()
-                            .child(
-                                div()
-                                    .left(px(3.))
-                                    .child(day.clone())
-                                    .when(jieqi_list.iter().any(|jieqi| jieqi == &day), |this| {
-                                        this.text_color(blue())
-                                    }),
-                            )
+                            .child(div().left(px(3.)).child(day.clone()))
                             .child(
                                 div()
                                     .top(px(0.))
@@ -794,6 +786,9 @@ impl Calendar {
                             .text_color(cx.theme().muted_foreground)
                             .text_size(px(9.))
                             .child(holiday.clone())
+                            .when(jieqi_list.iter().any(|jieqi| jieqi == &holiday), |this| {
+                                this.text_color(blue())
+                            })
                             .when(holiday.len() > 6, |this| this.text_color(gpui::green()))
                             .when(flag == "班", |this| this.text_color(gpui::red())),
                     ),
