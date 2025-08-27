@@ -727,6 +727,7 @@ impl Calendar {
             "芒种", "夏至", "小暑", "大暑", "立秋", "处暑", "白露", "秋分", "寒露", "霜降", "立冬",
             "小雪", "大雪",
         ];
+        println!("{day} {holiday} {flag}");
         h_flex()
             .id(id.into())
             .map(|this| match self.size {
