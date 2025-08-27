@@ -86,8 +86,8 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 }
 pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
     // 普通日："15 十五"
-    // 节假日："1 休 元旦"
-    // 调班日："4 班 清明节调班"
+    // 节假日："1 元旦 休"
+    // 调班日："4 清明节 班"
     use chrono::Datelike;
     use lunar_rust::{
         holiday::HolidayRefHelper,
