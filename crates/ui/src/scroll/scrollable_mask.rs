@@ -109,59 +109,65 @@ impl Element for ScrollableMask {
         let line_height = window.line_height();
         let bounds = hitbox.bounds;
 
-        window.with_content_mask(Some(ContentMask { bounds }), |window| {
-            if let Some(color) = self.debug {
-                window.paint_quad(PaintQuad {
-                    bounds,
-                    border_widths: Edges::all(px(1.0)),
-                    border_color: color,
-                    background: gpui::transparent_white().into(),
-                    corner_radii: Corners::all(px(0.)),
-                    border_style: BorderStyle::default(),
-                });
-            }
+        window.with_content_mask(
+            Some(ContentMask {
+                bounds,
+                ..Default::default()
+            }),
+            |window| {
+                if let Some(color) = self.debug {
+                    window.paint_quad(PaintQuad {
+                        bounds,
+                        border_widths: Edges::all(px(1.0)),
+                        border_color: color,
+                        background: gpui::transparent_white().into(),
+                        corner_radii: Corners::all(px(0.)),
+                        border_style: BorderStyle::default(),
+                    });
+                }
 
-            window.on_mouse_event({
-                let view_id = self.view_id;
-                let is_horizontal = self.axis.is_horizontal();
-                let scroll_handle = self.scroll_handle.clone();
-                let hitbox = hitbox.clone();
-                let mouse_position = window.mouse_position();
-                let last_offset = scroll_handle.offset();
+                window.on_mouse_event({
+                    let view_id = self.view_id;
+                    let is_horizontal = self.axis.is_horizontal();
+                    let scroll_handle = self.scroll_handle.clone();
+                    let hitbox = hitbox.clone();
+                    let mouse_position = window.mouse_position();
+                    let last_offset = scroll_handle.offset();
 
-                move |event: &ScrollWheelEvent, phase, window, cx| {
-                    if bounds.contains(&mouse_position)
-                        && phase.bubble()
-                        && hitbox.is_hovered(window)
-                    {
-                        let mut offset = scroll_handle.offset();
-                        let mut delta = event.delta.pixel_delta(line_height);
+                    move |event: &ScrollWheelEvent, phase, window, cx| {
+                        if bounds.contains(&mouse_position)
+                            && phase.bubble()
+                            && hitbox.is_hovered(window)
+                        {
+                            let mut offset = scroll_handle.offset();
+                            let mut delta = event.delta.pixel_delta(line_height);
 
-                        // Limit for only one way scrolling at same time.
-                        // When use MacBook touchpad we may get both x and y delta,
-                        // only allows the one that more to scroll.
-                        if !delta.x.is_zero() && !delta.y.is_zero() {
-                            if delta.x.abs() > delta.y.abs() {
-                                delta.y = px(0.);
+                            // Limit for only one way scrolling at same time.
+                            // When use MacBook touchpad we may get both x and y delta,
+                            // only allows the one that more to scroll.
+                            if !delta.x.is_zero() && !delta.y.is_zero() {
+                                if delta.x.abs() > delta.y.abs() {
+                                    delta.y = px(0.);
+                                } else {
+                                    delta.x = px(0.);
+                                }
+                            }
+
+                            if is_horizontal {
+                                offset.x += delta.x;
                             } else {
-                                delta.x = px(0.);
+                                offset.y += delta.y;
+                            }
+
+                            if last_offset != offset {
+                                scroll_handle.set_offset(offset);
+                                cx.notify(view_id);
+                                cx.stop_propagation();
                             }
                         }
-
-                        if is_horizontal {
-                            offset.x += delta.x;
-                        } else {
-                            offset.y += delta.y;
-                        }
-
-                        if last_offset != offset {
-                            scroll_handle.set_offset(offset);
-                            cx.notify(view_id);
-                            cx.stop_propagation();
-                        }
                     }
-                }
-            });
-        });
+                });
+            },
+        );
     }
 }
