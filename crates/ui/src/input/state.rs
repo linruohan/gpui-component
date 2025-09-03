@@ -11,8 +11,8 @@ use std::rc::Rc;
 use unicode_segmentation::*;
 
 use gpui::{
-    actions, div, point, prelude::FluentBuilder as _, px, relative, App, AppContext, Bounds,
-    ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
+    actions, div, point, prelude::FluentBuilder as _, px, App, AppContext, Bounds, ClipboardItem,
+    Context, Entity, EntityInputHandler, EventEmitter, FocusHandle, Focusable,
     InteractiveElement as _, IntoElement, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent,
     MouseMoveEvent, MouseUpEvent, ParentElement as _, Pixels, Point, Render, ScrollHandle,
     ScrollWheelEvent, SharedString, Styled as _, Subscription, UTF16Selection, Window, WrappedLine,
@@ -224,7 +224,7 @@ pub(super) struct LastLayout {
     pub(super) visible_range: Range<usize>,
     /// The wrap width of text layout, this will change will InputElement painted.
     pub(super) wrap_width: Option<Pixels>,
-    /// The line number width of text layout.
+    /// The line number area width of text layout, if not line number, this will be 0px.
     pub(super) line_number_width: Pixels,
 }
 
@@ -266,6 +266,7 @@ pub struct InputState {
     pub(super) disabled: bool,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
+    pub(super) soft_wrap: bool,
     pub(super) pattern: Option<regex::Regex>,
     pub(super) validate: Option<Box<dyn Fn(&str, &mut Context<Self>) -> bool + 'static>>,
     pub(crate) scroll_handle: ScrollHandle,
@@ -335,6 +336,7 @@ impl InputState {
             disabled: false,
             masked: false,
             clean_on_escape: false,
+            soft_wrap: true,
             loading: false,
             pattern: None,
             validate: None,
@@ -360,7 +362,6 @@ impl InputState {
     pub fn multi_line(mut self) -> Self {
         self.mode = InputMode::MultiLine {
             rows: 2,
-            height: None,
             tab: TabSize::default(),
         };
         self
@@ -402,7 +403,6 @@ impl InputState {
             language,
             highlighter: Rc::new(RefCell::new(None)),
             line_number: true,
-            height: Some(relative(1.)),
             markers: Rc::new(vec![]),
         };
         self
@@ -749,6 +749,18 @@ impl InputState {
     pub fn clean_on_escape(mut self) -> Self {
         self.clean_on_escape = true;
         self
+    }
+
+    /// Set the soft wrap mode for multi-line input, default is true.
+    pub fn soft_wrap(mut self, wrap: bool) -> Self {
+        self.soft_wrap = wrap;
+        self
+    }
+
+    /// Update the soft wrap mode for multi-line input, default is true.
+    pub fn set_soft_wrap(&mut self, wrap: bool, _: &mut Window, cx: &mut Context<Self>) {
+        self.soft_wrap = wrap;
+        cx.notify();
     }
 
     /// Set the regular expression pattern of the input field.
@@ -2100,7 +2112,14 @@ impl InputState {
         // Update text_wrapper wrap_width if changed.
         if let Some(last_layout) = self.last_layout.as_ref() {
             if wrap_width_changed {
-                self.text_wrapper.set_wrap_width(last_layout.wrap_width, cx);
+                let wrap_width = if !self.soft_wrap {
+                    // None to disable wrapping (will use Pixels::MAX)
+                    None
+                } else {
+                    last_layout.wrap_width
+                };
+
+                self.text_wrapper.set_wrap_width(wrap_width, cx);
                 self.mode.update_auto_grow(&self.text_wrapper);
                 cx.notify();
             }

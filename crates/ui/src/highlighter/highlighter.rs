@@ -1,12 +1,9 @@
 use super::HighlightTheme;
 use crate::highlighter::LanguageRegistry;
+
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
-use indexset::BTreeMap;
-use std::{
-    collections::HashMap,
-    ops::{Bound, Range},
-};
+use std::{collections::HashMap, ops::Range, usize};
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -39,7 +36,85 @@ pub struct SyntaxHighlighter {
     ///
     /// - The `key` is the `start` of the range.
     /// -The `value` is a tuple of the range (in the entire text) and the highlight name.
-    cache: BTreeMap<usize, (Range<usize>, SharedString)>,
+    cache: sum_tree::SumTree<HighlightItem>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct HighlightSummary {
+    count: usize,
+    start: usize,
+    end: usize,
+    min_start: usize,
+    max_end: usize,
+}
+
+#[derive(Debug, Default, Clone)]
+struct HighlightItem {
+    range: Range<usize>,
+    /// The highlight name, like `function`, `string`, `comment`, etc.
+    name: SharedString,
+}
+
+impl HighlightItem {
+    pub fn new(range: Range<usize>, name: impl Into<SharedString>) -> Self {
+        Self {
+            range,
+            name: name.into(),
+        }
+    }
+}
+
+impl sum_tree::Item for HighlightItem {
+    type Summary = HighlightSummary;
+    fn summary(&self, _cx: &()) -> Self::Summary {
+        HighlightSummary {
+            count: 1,
+            start: self.range.start,
+            end: self.range.end,
+            min_start: self.range.start,
+            max_end: self.range.end,
+        }
+    }
+}
+
+impl sum_tree::Summary for HighlightSummary {
+    type Context = ();
+    fn zero(_: &Self::Context) -> Self {
+        HighlightSummary {
+            count: 0,
+            start: usize::MIN,
+            end: usize::MAX,
+            min_start: usize::MAX,
+            max_end: usize::MIN,
+        }
+    }
+
+    fn add_summary(&mut self, other: &Self, _: &Self::Context) {
+        self.min_start = self.min_start.min(other.min_start);
+        self.max_end = self.max_end.max(other.max_end);
+        self.start = other.start;
+        self.end = other.end;
+        self.count += other.count;
+    }
+}
+
+impl<'a> sum_tree::Dimension<'a, HighlightSummary> for usize {
+    fn zero(_: &()) -> Self {
+        0
+    }
+
+    fn add_summary(&mut self, _: &'a HighlightSummary, _: &()) {}
+}
+
+impl<'a> sum_tree::Dimension<'a, HighlightSummary> for Range<usize> {
+    fn zero(_: &()) -> Self {
+        Default::default()
+    }
+
+    fn add_summary(&mut self, summary: &'a HighlightSummary, _: &()) {
+        self.start = summary.start;
+        self.end = summary.end;
+    }
 }
 
 impl SyntaxHighlighter {
@@ -180,7 +255,7 @@ impl SyntaxHighlighter {
             parser,
             old_tree: None,
             text: SharedString::new(""),
-            cache: BTreeMap::new(),
+            cache: sum_tree::SumTree::new(&()),
             locals_pattern_index,
             highlights_pattern_index,
             non_local_variable_patterns,
@@ -204,7 +279,7 @@ impl SyntaxHighlighter {
         selected_range: &Range<usize>,
         full_text: &SharedString,
         new_text: &str,
-        cx: &mut App,
+        cx: &App,
     ) {
         if &self.text == full_text {
             return;
@@ -216,6 +291,7 @@ impl SyntaxHighlighter {
         let changed_len = new_text.len() as isize - selected_range.len() as isize;
 
         let new_tree = match &self.old_tree {
+            // NOTE: 10K lines, about 4.5ms
             None => self.parser.parse(full_text.as_ref(), None),
             Some(old) => {
                 let edit = InputEdit {
@@ -228,7 +304,6 @@ impl SyntaxHighlighter {
                 };
                 let mut old_cloned = old.clone();
                 old_cloned.edit(&edit);
-                // NOTE: 10K lines, about 4.5ms
                 self.parser.parse(full_text.as_ref(), Some(&old_cloned))
             }
         };
@@ -237,27 +312,19 @@ impl SyntaxHighlighter {
             return;
         };
 
-        let mut changed_ranges = None;
-        if let Some(old_tree) = &self.old_tree {
-            changed_ranges = Some(new_tree.changed_ranges(old_tree));
-        }
-
         // Update state
         self.old_tree = Some(new_tree);
         self.text = full_text.clone();
 
-        // let measure = Measure::new("build_styles");
-        self.build_styles(changed_ranges, changed_len, cx);
+        // let measure = crate::Measure::new("build_styles");
+        self.build_styles(cx);
         // measure.end();
     }
 
     /// NOTE: 10K lines, about 180ms
-    fn build_styles(
-        &mut self,
-        changed_ranges: Option<impl ExactSizeIterator<Item = tree_sitter::Range>>,
-        changed_len: isize,
-        cx: &mut App,
-    ) {
+    /// FIXME: To improve the performance when there more than 5K lines, use partial update.
+    /// Ref: https://github.com/longbridge/gpui-component/pull/1197
+    fn build_styles(&mut self, cx: &App) {
         let Some(tree) = &self.old_tree else {
             return;
         };
@@ -268,78 +335,10 @@ impl SyntaxHighlighter {
 
         let source = self.text.as_bytes();
         let mut query_cursor = QueryCursor::new();
-        let mut root_node = tree.root_node();
-
-        // Incremental parsing to only update changed ranges.
-        if let Some(changed_ranges) = changed_ranges {
-            let mut total_range = (None, None);
-            for change_range in changed_ranges {
-                // dbg!(change_range);
-                if total_range.0.is_none() {
-                    total_range.0 = Some(change_range.start_byte);
-                }
-                if total_range.1.is_none() {
-                    total_range.1 = Some(change_range.end_byte);
-                }
-            }
-            let total_range = total_range.0.unwrap_or(0)..total_range.1.unwrap_or(0);
-
-            // println!("------- total_range: {:?}", total_range);
-
-            if total_range.len() == 0 {
-                return;
-            }
-
-            if let Some(node) =
-                root_node.descendant_for_byte_range(total_range.start, total_range.end)
-            {
-                root_node = node;
-            }
-
-            let byte_range = root_node.byte_range();
-
-            // let measure = Measure::new("update cache to change range offset");
-
-            // FIXME: If we delete 1 char in a node, that node will not highlighted.
-
-            // Remove the cache entries that are range is intersecting with the byte_range.
-            self.cache.retain(|_, (range, _)| {
-                if range.start < byte_range.end && range.end > byte_range.start {
-                    // Remove the item if it is intersecting with the byte_range.
-                    false
-                } else {
-                    // Keep the item if it is not intersecting with the byte_range.
-                    true
-                }
-            });
-
-            // Apply changed_len to reorder the cache to move the range offset
-            let mut old_cache: BTreeMap<usize, (Range<usize>, SharedString)> = BTreeMap::new();
-            std::mem::swap(&mut self.cache, &mut old_cache);
-
-            // NOTE: 10K lines, about 35ms
-            for (start, (old_range, highlight_name)) in old_cache.into_iter() {
-                if old_range.end >= byte_range.start {
-                    let new_range = Range {
-                        start: (old_range.start as isize + changed_len).max(0) as usize,
-                        end: (old_range.end as isize + changed_len).max(0) as usize,
-                    };
-
-                    if new_range.len() > 0 {
-                        self.cache
-                            .insert(new_range.start, (new_range, highlight_name));
-                    }
-                } else {
-                    self.cache.insert(start, (old_range, highlight_name));
-                }
-            }
-            // measure.end();
-        } else {
-            self.cache.clear();
-        }
+        let root_node = tree.root_node();
+        self.cache = sum_tree::SumTree::new(&());
 
         let mut matches = query_cursor.matches(&query, root_node, source);
-
         while let Some(m) = matches.next() {
             // Ref:
             // https://github.com/tree-sitter/tree-sitter/blob/460118b4c82318b083b4d527c9c750426730f9c0/highlight/src/lib.rs#L556
@@ -348,10 +347,9 @@ impl SyntaxHighlighter {
                 if let Some(content_node) = content_node {
                     let styles = self.handle_injection(&language_name, content_node, source, cx);
                     for (node_range, highlight_name) in styles {
-                        self.cache.insert(
-                            node_range.start,
-                            (node_range, highlight_name.to_string().into()),
-                        );
+                        self.cache
+                            .push(HighlightItem::new(node_range.clone(), highlight_name), &());
+                        // .insert(node_range.start, (node_range, highlight_name.into()));
                     }
                 }
 
@@ -369,28 +367,34 @@ impl SyntaxHighlighter {
                 let highlight_name = SharedString::from(highlight_name.to_string());
 
                 // Merge near range and same highlight name
-                let last_item = self.cache.last_key_value().map(|kv| kv.1);
-                let last_range = last_item.map(|(range, _)| range).unwrap_or(&(0..0));
-                let last_highlight_name = last_item.map(|(_, name)| name.clone());
+                let last_item = self.cache.last();
+                let last_range = last_item.map(|item| &item.range).unwrap_or(&(0..0));
+                let last_highlight_name = last_item.map(|item| item.name.clone());
 
                 if last_range.end <= node_range.start
                     && last_highlight_name.as_ref() == Some(&highlight_name)
                 {
-                    self.cache.insert(
-                        last_range.start,
-                        (last_range.start..node_range.end, highlight_name.clone()),
+                    self.cache.push(
+                        HighlightItem::new(
+                            last_range.start..node_range.end,
+                            highlight_name.clone(),
+                        ),
+                        &(),
                     );
                 } else if last_range == &node_range {
                     // case:
                     // last_range: 213..220, last_highlight_name: Some("property")
                     // last_range: 213..220, last_highlight_name: Some("string")
-                    self.cache.insert(
-                        node_range.start,
-                        (node_range, last_highlight_name.unwrap_or(highlight_name)),
+                    self.cache.push(
+                        HighlightItem::new(
+                            node_range,
+                            last_highlight_name.unwrap_or(highlight_name),
+                        ),
+                        &(),
                     );
                 } else {
                     self.cache
-                        .insert(node_range.start, (node_range, highlight_name.clone()));
+                        .push(HighlightItem::new(node_range, highlight_name.clone()), &());
                 }
             }
         }
@@ -551,28 +555,29 @@ impl SyntaxHighlighter {
     ) -> Vec<(Range<usize>, HighlightStyle)> {
         let mut styles = vec![];
         let start_offset = range.start;
+
+        let mut cursor = self.cache.cursor::<usize>(&());
+        let bias = if start_offset == 0 {
+            sum_tree::Bias::Right
+        } else {
+            sum_tree::Bias::Left
+        };
+
+        let left_items = cursor.slice(&start_offset, bias);
+        let mut filter = left_items.filter::<_, Range<usize>>(&(), move |sum| {
+            range.start <= sum.max_end && range.end >= sum.min_start
+        });
+        filter.next();
+
         let mut last_range = start_offset..start_offset;
+        // let mut iter_count = 0;
+        while let Some(item) = filter.item() {
+            // iter_count += 1;
+            let node_range = &item.range;
+            let name = &item.name;
 
-        // NOTE: Iterate over the cache and print the range and style for each item.
-        // for (_, (range, style)) in self.cache.iter() {
-        //     println!("-- range: {:?}, style: {:?}", range, style);
-        // }
-
-        let mut cursor = self.cache.lower_bound(Bound::Included(&range.start));
-        // Move to the previous item if the current item is not the start of the range.
-        // This is for case like JsDoc, where token may contains multiple lines.
-        if cursor.key() != Some(&range.start) {
-            cursor.move_prev();
-        }
-
-        while let Some((node_range, name)) = cursor.value() {
-            // Break loop if the node_range is out of the range
-            if node_range.start > range.end {
-                break;
-            }
-
-            let mut node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
             // Avoid start larger than end
+            let mut node_range = node_range.start.max(range.start)..node_range.end.min(range.end);
             if node_range.start > node_range.end {
                 node_range.end = node_range.start;
             }
@@ -588,8 +593,9 @@ impl SyntaxHighlighter {
                 theme.style(name.as_ref()).unwrap_or_default(),
             ));
 
-            cursor.move_next();
+            filter.next();
         }
+        // dbg!(iter_count);
 
         // If the matched styles is empty, return a default range.
         if styles.len() == 0 {
