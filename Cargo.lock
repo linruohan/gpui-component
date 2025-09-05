@@ -724,7 +724,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.12.1",
  "lazy_static",
  "lazycell",
  "log",
@@ -747,7 +747,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.11.0",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -3198,6 +3198,7 @@ dependencies = [
  "enum-iterator",
  "gpui",
  "gpui-component-macros",
+ "gpui_macros",
  "html5ever 0.27.0",
  "indoc",
  "itertools 0.13.0",
@@ -3210,6 +3211,7 @@ dependencies = [
  "palette",
  "paste",
  "regex",
+ "ropey",
  "rust-i18n",
  "rust_decimal",
  "schemars",
@@ -6724,6 +6726,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ropey"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93411e420bcd1a75ddd1dc3caf18c23155eda2c090631a85af21ba19e97093b5"
+dependencies = [
+ "smallvec",
+ "str_indices",
+]
+
+[[package]]
 name = "roxmltree"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7742,6 +7754,12 @@ dependencies = [
  "tree-sitter-navi",
  "unindent",
 ]
+
+[[package]]
+name = "str_indices"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d08889ec5408683408db66ad89e0e1f93dff55c73a4ccc71c427d5b277ee47e6"
 
 [[package]]
 name = "streaming-iterator"
