@@ -476,6 +476,11 @@ impl CalendarState {
         .into()
     }
 
+    fn year_name(&self, offset_month: usize) -> SharedString {
+        let (year, _) = self.offset_year_month(offset_month);
+        year.to_string().into()
+    }
+
     fn set_view_mode(&mut self, mode: ViewMode, _: &mut Window, cx: &mut Context<Self>) {
         self.view_mode = mode;
         cx.notify();
@@ -536,7 +541,7 @@ impl Calendar {
         let (_, month) = state.offset_year_month(offset_month);
         let _day = d.day();
         let is_current_month = d.month() == month;
-        let is_active = state.date.is_active(d) && is_current_month;
+        let is_active = state.date.is_active(d);
         let is_in_range = state.date.is_in_range(d);
 
         let date = *d;
@@ -546,8 +551,10 @@ impl Calendar {
             .as_ref()
             .map_or(false, |disabled| disabled.matched(&date));
 
+        let date_id: SharedString = format!("{}_{}", date.format("%Y-%m-%d"), offset_month).into();
+
         self.item_button(
-            d.ordinal() as usize,
+            date_id,
             // day.to_string(),
             get_holiday_by_lunar_rust(date),
             is_active,
@@ -684,7 +691,7 @@ impl Calendar {
                                 _ => this.gap_3(),
                             })
                             .child(state.month_name(n))
-                            .child(current_year.to_string())
+                            .child(state.year_name(n))
                     }),
                 ))
             })

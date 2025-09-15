@@ -1,16 +1,14 @@
-use super::HighlightTheme;
-use crate::highlighter::LanguageRegistry;
+use crate::{highlighter::LanguageRegistry, input::RopeExt as _, ActiveTheme};
 
 use anyhow::{anyhow, Context, Result};
 use gpui::{App, HighlightStyle, SharedString};
-use ropey::Rope;
+
+use rope::Rope;
 use std::{
     collections::{BTreeSet, HashMap},
     ops::Range,
-    slice::Chunks,
     usize,
 };
-use sum_tree::{Bias, SumTree};
 use tree_sitter::{
     InputEdit, Node, Parser, Point, Query, QueryCursor, QueryMatch, StreamingIterator, Tree,
 };
@@ -22,9 +20,6 @@ pub struct SyntaxHighlighter {
     language: SharedString,
     query: Option<Query>,
     injection_queries: HashMap<SharedString, Query>,
-    parser: Parser,
-    old_tree: Option<Tree>,
-    text: Rope,
 
     locals_pattern_index: usize,
     highlights_pattern_index: usize,
@@ -37,17 +32,28 @@ pub struct SyntaxHighlighter {
     local_def_value_capture_index: Option<u32>,
     local_ref_capture_index: Option<u32>,
 
-    /// Cache of highlight, the range is offset of the token in the tree.
-    cache: SumTree<HighlightItem>,
+    /// The last parsed source text.
+    text: Rope,
+    parser: Parser,
+    /// The last parsed tree.
+    tree: Option<Tree>,
 }
 
 struct TextProvider<'a>(&'a Rope);
+struct ByteChunks<'a>(rope::Chunks<'a>);
 impl<'a> tree_sitter::TextProvider<&'a [u8]> for TextProvider<'a> {
-    type I = Chunks<'a, u8>;
+    type I = ByteChunks<'a>;
 
     fn text(&mut self, node: tree_sitter::Node) -> Self::I {
-        let slice = self.0.byte_slice(node.start_byte()..node.end_byte());
-        slice.as_str().unwrap_or_default().as_bytes().chunks(64)
+        ByteChunks(self.0.chunks_in_range(node.byte_range()))
+    }
+}
+
+impl<'a> Iterator for ByteChunks<'a> {
+    type Item = &'a [u8];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(str::as_bytes)
     }
 }
 
@@ -266,10 +272,7 @@ impl SyntaxHighlighter {
             language: config.name.clone(),
             query: Some(query),
             injection_queries,
-            parser,
-            old_tree: None,
-            text: Rope::new(),
-            cache: sum_tree::SumTree::new(&()),
+
             locals_pattern_index,
             highlights_pattern_index,
             non_local_variable_patterns,
@@ -279,43 +282,44 @@ impl SyntaxHighlighter {
             local_def_capture_index,
             local_def_value_capture_index,
             local_ref_capture_index,
+            text: Rope::new(),
+            parser,
+            tree: None,
         })
     }
 
     pub fn is_empty(&self) -> bool {
-        self.text.len_bytes() == 0
+        self.text.len() == 0
     }
 
     /// Highlight the given text, returning a map from byte ranges to highlight captures.
-    /// Uses incremental parsing, detects changed ranges, and caches unchanged results.
-    pub fn update(&mut self, edit: Option<InputEdit>, text: &Rope, cx: &App) {
-        if &self.text == text {
+    ///
+    /// Uses incremental parsing by `edit` to efficiently update the highlighter's state.
+    pub fn update(&mut self, edit: Option<InputEdit>, text: &Rope) {
+        if self.text.eq(text) {
             return;
         }
 
         let edit = edit.unwrap_or(InputEdit {
             start_byte: 0,
             old_end_byte: 0,
-            new_end_byte: text.len_bytes(),
+            new_end_byte: text.len(),
             start_position: Point::new(0, 0),
             old_end_position: Point::new(0, 0),
             new_end_position: Point::new(0, 0),
         });
 
         let mut old_tree = self
-            .old_tree
+            .tree
             .take()
             .unwrap_or(self.parser.parse("", None).unwrap());
         old_tree.edit(&edit);
 
+        let mut chunks = text.chunks();
         let new_tree = self.parser.parse_with_options(
-            &mut |offset, _| {
-                if offset >= text.len_bytes() {
-                    ""
-                } else {
-                    let (chunk, chunk_byte_ix, _, _) = text.chunk_at_byte(offset);
-                    &chunk[offset - chunk_byte_ix..]
-                }
+            &mut move |offset, _| {
+                chunks.seek(offset);
+                chunks.next().unwrap_or("").as_bytes()
             },
             Some(&old_tree),
             None,
@@ -325,38 +329,26 @@ impl SyntaxHighlighter {
             return;
         };
 
-        // let changed_ranges = new_tree.changed_ranges(&old_tree);
-
-        // Update state
-        self.old_tree = Some(new_tree);
+        self.tree = Some(new_tree);
         self.text = text.clone();
-
-        // let measure = crate::Measure::new("build_styles");
-        self.build_styles(cx);
-        // measure.end();
     }
 
-    /// NOTE: 10K lines, about 180ms
-    /// FIXME: To improve the performance when there more than 5K lines, use partial update.
-    /// Ref: https://github.com/longbridge/gpui-component/pull/1197
-    fn build_styles(&mut self, cx: &App) {
-        let Some(tree) = &self.old_tree else {
-            return;
+    /// Match the visible ranges of nodes in the Tree for highlighting.
+    fn match_styles(&self, range: Range<usize>, cx: &App) -> Vec<HighlightItem> {
+        let mut highlights = vec![];
+        let Some(tree) = &self.tree else {
+            return highlights;
         };
 
         let Some(query) = &self.query else {
-            return;
+            return highlights;
         };
 
         let root_node = tree.root_node();
 
-        // Remove the changed items from the cache.
-        let new_cache = sum_tree::SumTree::new(&());
-        self.cache = new_cache;
-
-        let source = self.text.clone();
-
+        let source = &self.text;
         let mut cursor = QueryCursor::new();
+        cursor.set_byte_range(range);
         let mut matches = cursor.matches(&query, root_node, TextProvider(&source));
 
         while let Some(query_match) = matches.next() {
@@ -367,8 +359,7 @@ impl SyntaxHighlighter {
             {
                 let styles = self.handle_injection(&language_name, content_node, cx);
                 for (node_range, highlight_name) in styles {
-                    self.cache
-                        .push(HighlightItem::new(node_range.clone(), highlight_name), &());
+                    highlights.push(HighlightItem::new(node_range.clone(), highlight_name));
                 }
 
                 continue;
@@ -385,42 +376,37 @@ impl SyntaxHighlighter {
                 let highlight_name = SharedString::from(highlight_name.to_string());
 
                 // Merge near range and same highlight name
-                let last_item = self.cache.last();
+                let last_item = highlights.last();
                 let last_range = last_item.map(|item| &item.range).unwrap_or(&(0..0));
                 let last_highlight_name = last_item.map(|item| item.name.clone());
 
                 if last_range.end <= node_range.start
                     && last_highlight_name.as_ref() == Some(&highlight_name)
                 {
-                    self.cache.push(
-                        HighlightItem::new(
-                            last_range.start..node_range.end,
-                            highlight_name.clone(),
-                        ),
-                        &(),
-                    );
+                    highlights.push(HighlightItem::new(
+                        last_range.start..node_range.end,
+                        highlight_name.clone(),
+                    ));
                 } else if last_range == &node_range {
                     // case:
                     // last_range: 213..220, last_highlight_name: Some("property")
                     // last_range: 213..220, last_highlight_name: Some("string")
-                    self.cache.push(
-                        HighlightItem::new(
-                            node_range,
-                            last_highlight_name.unwrap_or(highlight_name),
-                        ),
-                        &(),
-                    );
+                    highlights.push(HighlightItem::new(
+                        node_range,
+                        last_highlight_name.unwrap_or(highlight_name),
+                    ));
                 } else {
-                    self.cache
-                        .push(HighlightItem::new(node_range, highlight_name.clone()), &());
+                    highlights.push(HighlightItem::new(node_range, highlight_name.clone()));
                 }
             }
         }
 
         // DO NOT REMOVE THIS PRINT, it's useful for debugging
-        // for item in self.cache.iter() {
+        // for item in highlights {
         //     println!("item: {:?}", item);
         // }
+
+        highlights
     }
 
     /// TODO: Use incremental parsing to handle the injection.
@@ -437,10 +423,13 @@ impl SyntaxHighlighter {
             return cache;
         };
 
-        let content = self.text.byte_slice(node.start_byte()..node.end_byte());
-        if content.len_bytes() == 0 {
+        let content = self.text.slice(node.byte_range());
+        if content.len() == 0 {
             return cache;
         };
+        // FIXME: Avoid to_string.
+        let content = content.to_string();
+
         let Some(config) = LanguageRegistry::global(cx).language(injection_language) else {
             return cache;
         };
@@ -449,7 +438,7 @@ impl SyntaxHighlighter {
             return cache;
         }
 
-        let source = content.as_str().unwrap_or_default().as_bytes();
+        let source = content.as_bytes();
         let Some(tree) = parser.parse(source, None) else {
             return cache;
         };
@@ -561,27 +550,17 @@ impl SyntaxHighlighter {
     pub(crate) fn styles(
         &self,
         range: &Range<usize>,
-        theme: &HighlightTheme,
+        cx: &App,
     ) -> Vec<(Range<usize>, HighlightStyle)> {
+        let theme = &cx.theme().highlight_theme;
+
         let mut styles = vec![];
         let start_offset = range.start;
 
-        let mut cursor = self.cache.cursor::<usize>(&());
-        let bias = if start_offset == 0 {
-            Bias::Right
-        } else {
-            Bias::Left
-        };
+        let highlights = self.match_styles(range.clone(), cx);
 
-        let left_items = cursor.slice(&start_offset, bias);
-        let mut filter = left_items.filter::<_, Range<usize>>(&(), move |sum| {
-            range.start <= sum.max_end && range.end >= sum.min_start
-        });
-        filter.next();
-
-        let mut last_range = start_offset..start_offset;
         // let mut iter_count = 0;
-        while let Some(item) = filter.item() {
+        for item in highlights {
             // iter_count += 1;
             let node_range = &item.range;
             let name = &item.name;
@@ -592,19 +571,7 @@ impl SyntaxHighlighter {
                 node_range.end = node_range.start;
             }
 
-            // Ensure every range is connected.
-            if last_range.end < node_range.start {
-                styles.push((last_range.end..node_range.start, HighlightStyle::default()));
-            }
-
-            let start = node_range.start.max(last_range.end);
-            styles.push((
-                start..node_range.end,
-                theme.style(name.as_ref()).unwrap_or_default(),
-            ));
-            last_range = node_range;
-
-            filter.next();
+            styles.push((node_range, theme.style(name.as_ref()).unwrap_or_default()));
         }
         // dbg!(iter_count);
 
@@ -613,12 +580,7 @@ impl SyntaxHighlighter {
             return vec![(start_offset..range.end, HighlightStyle::default())];
         }
 
-        // Ensure the last range is connected to the end of the line.
-        if last_range.end < range.end {
-            styles.push((last_range.end..range.end, HighlightStyle::default()));
-        }
-
-        let styles = unique_styles(styles);
+        let styles = unique_styles(&range, styles);
 
         // NOTE: DO NOT remove this comment, it is used for debugging.
         // for style in &styles {
@@ -645,44 +607,58 @@ impl SyntaxHighlighter {
 ///
 /// AABCCDDCEEEE
 pub(crate) fn unique_styles(
+    total_range: &Range<usize>,
     styles: Vec<(Range<usize>, HighlightStyle)>,
 ) -> Vec<(Range<usize>, HighlightStyle)> {
     if styles.is_empty() {
         return styles;
     }
 
-    // Collect all boundary points and track which are "significant" (range endpoints)
-    let mut boundaries = BTreeSet::new();
-    let mut significant_boundaries = BTreeSet::new();
+    let mut intervals = BTreeSet::new();
+    let mut significant_intervals = BTreeSet::new();
 
+    // For example
+    //
+    // from: [(6..11), (6..11), (11..17), (17..25), (16..19), (25..59))]
+    // to:   [6, 11, 16, 17, 19, 25, 59]
+    intervals.insert(total_range.start);
+    intervals.insert(total_range.end);
     for (range, _) in &styles {
-        boundaries.insert(range.start);
-        boundaries.insert(range.end);
-        significant_boundaries.insert(range.end); // End points are significant for merging decisions
+        intervals.insert(range.start);
+        intervals.insert(range.end);
+        significant_intervals.insert(range.end); // End points are significant for merging decisions
     }
 
-    let boundaries: Vec<usize> = boundaries.into_iter().collect();
-    let mut result = Vec::with_capacity(boundaries.len().saturating_sub(1));
+    let intervals: Vec<usize> = intervals.into_iter().collect();
+    let mut result = Vec::with_capacity(intervals.len().saturating_sub(1));
 
     // For each interval between boundaries, find the top-most style
-    for i in 0..boundaries.len().saturating_sub(1) {
-        let interval_start = boundaries[i];
-        let interval_end = boundaries[i + 1];
-
-        if interval_start >= interval_end {
+    //
+    // Result e.g.:
+    //
+    // [(6..11, red), (11..16, green), (16..17, blue), (17..19, red), (19..25, clean), (25..59, blue)]
+    for i in 0..intervals.len().saturating_sub(1) {
+        let interval = intervals[i]..intervals[i + 1];
+        if interval.start >= interval.end {
             continue;
         }
 
         // Find the last (top-most) style that covers this interval
-        let mut top_style: Option<&HighlightStyle> = None;
+        let mut top_style: Option<HighlightStyle> = None;
         for (range, style) in &styles {
-            if range.start <= interval_start && interval_end <= range.end {
-                top_style = Some(style);
+            if range.start <= interval.start && interval.end <= range.end {
+                if let Some(top_style) = &mut top_style {
+                    merge_highlight_style(top_style, style);
+                } else {
+                    top_style = Some(*style);
+                }
             }
         }
 
         if let Some(style) = top_style {
-            result.push((interval_start..interval_end, *style));
+            result.push((interval, style));
+        } else {
+            result.push((interval, HighlightStyle::default()));
         }
     }
 
@@ -692,7 +668,7 @@ pub(crate) fn unique_styles(
         if let Some((last_range, last_style)) = merged.last_mut() {
             if last_range.end == range.start
                 && *last_style == style
-                && !significant_boundaries.contains(&range.start)
+                && !significant_intervals.contains(&range.start)
             {
                 // Merge adjacent ranges with same style, but not across significant boundaries
                 last_range.end = range.end;
@@ -703,6 +679,31 @@ pub(crate) fn unique_styles(
     }
 
     merged
+}
+
+/// Merge other style (Other on top)
+fn merge_highlight_style(style: &mut HighlightStyle, other: &HighlightStyle) {
+    if let Some(color) = other.color {
+        style.color = Some(color);
+    }
+    if let Some(font_weight) = other.font_weight {
+        style.font_weight = Some(font_weight);
+    }
+    if let Some(font_style) = other.font_style {
+        style.font_style = Some(font_style);
+    }
+    if let Some(background_color) = other.background_color {
+        style.background_color = Some(background_color);
+    }
+    if let Some(underline) = other.underline {
+        style.underline = Some(underline);
+    }
+    if let Some(strikethrough) = other.strikethrough {
+        style.strikethrough = Some(strikethrough);
+    }
+    if let Some(fade_out) = other.fade_out {
+        style.fade_out = Some(fade_out);
+    }
 }
 
 #[cfg(test)]
@@ -720,6 +721,7 @@ mod tests {
 
     #[track_caller]
     fn assert_unique_styles(
+        range: Range<usize>,
         left: Vec<(Range<usize>, HighlightStyle)>,
         right: Vec<(Range<usize>, HighlightStyle)>,
     ) {
@@ -740,7 +742,7 @@ mod tests {
             }
         }
 
-        let left = unique_styles(left);
+        let left = unique_styles(&range, left);
         if left.len() != right.len() {
             println!("\n---------------------------------------------");
             for (range, style) in left.iter() {
@@ -770,18 +772,21 @@ mod tests {
         let clean = HighlightStyle::default();
 
         assert_unique_styles(
+            0..65,
             vec![
-                (0..10, clean),
-                (0..10, clean),
+                (2..10, clean),
+                (2..10, clean),
                 (5..11, red),
-                (0..6, clean),
+                (2..6, clean),
                 (10..15, green),
                 (15..30, clean),
                 (29..35, blue),
                 (35..40, green),
+                (45..60, blue),
             ],
             vec![
-                (0..6, clean),
+                (0..5, clean),
+                (5..6, red),
                 (6..10, red),
                 (10..11, green),
                 (11..15, green),
@@ -789,6 +794,9 @@ mod tests {
                 (29..30, blue),
                 (30..35, blue),
                 (35..40, green),
+                (40..45, clean),
+                (45..60, blue),
+                (60..65, clean),
             ],
         );
     }

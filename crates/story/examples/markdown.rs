@@ -11,6 +11,7 @@ use story::Assets;
 pub struct Example {
     input_state: Entity<InputState>,
     resizable_state: Entity<ResizableState>,
+    _subscriptions: Vec<Subscription>,
 }
 
 const EXAMPLE: &str = include_str!("./fixtures/test.md");
@@ -30,13 +31,12 @@ impl Example {
         });
         let resizable_state = ResizableState::new(cx);
 
-        let _subscribe = cx.subscribe(&input_state, |_, _, _: &InputEvent, cx| {
-            cx.notify();
-        });
+        let _subscriptions = vec![cx.subscribe(&input_state, |_, _, _: &InputEvent, _| {})];
 
         Self {
             resizable_state,
             input_state,
+            _subscriptions,
         }
     }
 

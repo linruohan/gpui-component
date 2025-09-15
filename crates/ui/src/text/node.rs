@@ -7,7 +7,7 @@ use gpui::{
     StatefulInteractiveElement, Styled, StyledImage as _, Window,
 };
 use markdown::mdast;
-use ropey::Rope;
+use rope::Rope;
 
 use crate::{
     h_flex,
@@ -166,12 +166,12 @@ impl Paragraph {
         for c in self.children.iter() {
             if let Some(selection) = c.state.selection.borrow().as_ref() {
                 let part_text = c.state.text.borrow().clone();
-                text.push_str(&part_text[selection.start.offset()..selection.end.offset()]);
+                text.push_str(&part_text[selection.start..selection.end]);
             }
         }
         if let Some(selection) = self.state.selection.borrow().as_ref() {
             let all_text = self.state.text.borrow().clone();
-            text.push_str(&all_text[selection.start.offset()..selection.end.offset()]);
+            text.push_str(&all_text[selection.start..selection.end]);
         }
 
         text
@@ -288,12 +288,11 @@ impl CodeBlock {
         _: &TextViewStyle,
         cx: &App,
     ) -> Self {
-        let theme = cx.theme().highlight_theme.clone();
         let mut styles = vec![];
         if let Some(lang) = &lang {
             let mut highlighter = SyntaxHighlighter::new(&lang, cx);
-            highlighter.update(None, &Rope::from_str(code.as_str()), cx);
-            styles = highlighter.styles(&(0..code.len()), &theme);
+            highlighter.update(None, &Rope::from(code.as_str()));
+            styles = highlighter.styles(&(0..code.len()), cx);
         };
 
         let state = InlineState::default();
@@ -314,7 +313,7 @@ impl CodeBlock {
         let mut text = String::new();
         if let Some(selection) = self.state.selection.borrow().as_ref() {
             let part_text = self.state.text.borrow().clone();
-            text.push_str(&part_text[selection.start.offset()..selection.end.offset()]);
+            text.push_str(&part_text[selection.start..selection.end]);
         }
         text
     }
@@ -868,7 +867,10 @@ impl Node {
                     _ => (rems(1.), FontWeight::NORMAL),
                 };
 
-                let text_size = text_size.to_pixels(node_cx.style.heading_base_font_size);
+                let mut text_size = text_size.to_pixels(node_cx.style.heading_base_font_size);
+                if let Some(f) = node_cx.style.heading_font_size.as_ref() {
+                    text_size = (f)(*level, node_cx.style.heading_base_font_size);
+                }
 
                 h_flex()
                     .id(("h", *level as usize))
