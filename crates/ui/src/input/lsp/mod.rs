@@ -1,5 +1,5 @@
 use anyhow::Result;
-use gpui::{App, Context, EntityInputHandler, MouseMoveEvent, Task, Window};
+use gpui::{App, Context, MouseMoveEvent, Task, Window};
 use std::rc::Rc;
 
 use crate::input::{popovers::ContextMenu, InputState, RopeExt};
@@ -82,6 +82,7 @@ impl InputState {
                     handled = menu.handle_action(action, window, cx)
                 });
             }
+            ContextMenu::MouseContext(..) => {}
         };
 
         handled
@@ -99,7 +100,7 @@ impl InputState {
             let end = self.text.position_to_offset(&edit.range.end);
 
             let range_utf16 = self.range_to_utf16(&(start..end));
-            self.replace_text_in_range(Some(range_utf16), &edit.new_text, window, cx);
+            self.replace_text_in_range_silent(Some(range_utf16), &edit.new_text, window, cx);
         }
     }
 
@@ -114,7 +115,7 @@ impl InputState {
             self.hover_popover = None;
             self.handle_hover_definition(offset, window, cx);
         } else {
-            self.hover_definition = None;
+            self.hover_definition.clear();
             self.handle_hover_popover(offset, window, cx);
         }
     }

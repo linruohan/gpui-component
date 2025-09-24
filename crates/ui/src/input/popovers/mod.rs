@@ -1,10 +1,12 @@
 mod code_action_menu;
 mod completion_menu;
+mod context_menu;
 mod diagnostic_popover;
 mod hover_popover;
 
 pub(crate) use code_action_menu::*;
 pub(crate) use completion_menu::*;
+pub(crate) use context_menu::*;
 pub(crate) use diagnostic_popover::*;
 pub(crate) use hover_popover::*;
 
@@ -15,12 +17,13 @@ use gpui::{
 
 use crate::{
     text::{TextView, TextViewStyle},
-    ActiveTheme as _,
+    StyledExt as _,
 };
 
 pub(crate) enum ContextMenu {
     Completion(Entity<CompletionMenu>),
     CodeAction(Entity<CodeActionMenu>),
+    MouseContext(Entity<MouseContextMenu>),
 }
 
 impl ContextMenu {
@@ -28,6 +31,7 @@ impl ContextMenu {
         match self {
             ContextMenu::Completion(menu) => menu.read(cx).is_open(),
             ContextMenu::CodeAction(menu) => menu.read(cx).is_open(),
+            ContextMenu::MouseContext(menu) => menu.read(cx).is_open(),
         }
     }
 
@@ -35,6 +39,7 @@ impl ContextMenu {
         match self {
             ContextMenu::Completion(menu) => menu.clone().into_any_element(),
             ContextMenu::CodeAction(menu) => menu.clone().into_any_element(),
+            ContextMenu::MouseContext(menu) => menu.clone().into_any_element(),
         }
     }
 }
@@ -58,17 +63,13 @@ pub(super) fn render_markdown(
         .selectable()
 }
 
-pub(super) fn popover(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
+pub(super) fn editor_popover(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
     div()
         .id(id)
         .flex_none()
         .occlude()
-        .p_1()
-        .text_xs()
-        .text_color(cx.theme().popover_foreground)
-        .bg(cx.theme().popover)
-        .border_1()
-        .border_color(cx.theme().border)
-        .rounded(cx.theme().radius)
+        .popover_style(cx)
         .shadow_md()
+        .text_xs()
+        .p_1()
 }

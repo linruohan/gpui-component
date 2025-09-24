@@ -4,8 +4,8 @@ use std::{ops::Range, rc::Rc};
 
 use gpui::{
     actions, canvas, div, prelude::FluentBuilder as _, App, AppContext as _, Context, Empty,
-    Entity, EntityInputHandler, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement,
-    KeyBinding, ParentElement as _, Pixels, Render, Styled, Subscription, Window,
+    Entity, FocusHandle, Focusable, Half, InteractiveElement as _, IntoElement, KeyBinding,
+    ParentElement as _, Pixels, Render, Styled, Subscription, Window,
 };
 use rope::Rope;
 
@@ -345,7 +345,7 @@ impl SearchPanel {
                     text_state.update(cx, |state, cx| {
                         let range_utf16 = state.range_to_utf16(&range);
                         state.scroll_to(next_range.end, cx);
-                        state.replace_text_in_range(
+                        state.replace_text_in_range_silent(
                             Some(range_utf16),
                             new_text.as_str(),
                             window,
@@ -375,7 +375,7 @@ impl SearchPanel {
                     for range in ranges.iter().rev() {
                         rope.replace(range.clone(), new_text.as_str());
                     }
-                    state.replace_text_in_range(
+                    state.replace_text_in_range_silent(
                         Some(0..state.text.len()),
                         &rope.to_string(),
                         window,
@@ -568,7 +568,7 @@ mod tests {
         matcher.update_query("Is", true);
 
         assert_eq!(matcher.len(), 3);
-        let mut matches = matcher.clone().into_iter();
+        let mut matches = matcher.clone();
         assert_eq!(matches.current_match_ix, 0);
         assert_eq!(matches.next(), Some(18..20));
         assert_eq!(matches.next(), Some(23..25));

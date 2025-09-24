@@ -20,8 +20,8 @@ use gpui_component::{
     v_flex, ActiveTheme, ContextModal, IconName, IndexPath, Selectable, Sizable,
 };
 use lsp_types::{
-    CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse, TextEdit,
-    WorkspaceEdit,
+    CodeAction, CodeActionKind, CompletionContext, CompletionItem, CompletionResponse,
+    CompletionTextEdit, InsertReplaceEdit, TextEdit, WorkspaceEdit,
 };
 use story::Assets;
 
@@ -166,38 +166,82 @@ impl ExampleLspStore {
     }
 }
 
+fn completion_item(
+    replace_range: &lsp_types::Range,
+    label: &str,
+    replace_text: &str,
+    documentation: &str,
+) -> CompletionItem {
+    CompletionItem {
+        label: label.to_string(),
+        kind: Some(lsp_types::CompletionItemKind::FUNCTION),
+        text_edit: Some(CompletionTextEdit::InsertAndReplace(InsertReplaceEdit {
+            new_text: replace_text.to_string(),
+            insert: replace_range.clone(),
+            replace: replace_range.clone(),
+        })),
+        documentation: Some(lsp_types::Documentation::String(documentation.to_string())),
+        insert_text: None,
+        ..Default::default()
+    }
+}
+
 impl CompletionProvider for ExampleLspStore {
     fn completions(
         &self,
         rope: &Rope,
-        _offset: usize,
+        offset: usize,
         trigger: CompletionContext,
         _: &mut Window,
         cx: &mut Context<InputState>,
-    ) -> Task<Result<Vec<CompletionResponse>>> {
+    ) -> Task<Result<CompletionResponse>> {
         let trigger_character = trigger.trigger_character.unwrap_or_default();
         if trigger_character.is_empty() {
-            return Task::ready(Ok(vec![]));
+            return Task::ready(Ok(CompletionResponse::Array(vec![])));
         }
 
-        let _ = rope.to_string(); // Just to use the rope parameter.
-
         // Simulate to delay for fetching completions
+        let rope = rope.clone();
         let items = self.completions.clone();
         cx.background_spawn(async move {
             // Simulate a slow completion source, to test Editor async handling.
             smol::Timer::after(Duration::from_millis(20)).await;
 
+            if trigger_character.starts_with("/") {
+                let start = offset.saturating_sub(trigger_character.len());
+                let start_pos = rope.offset_to_position(start);
+                let end_pos = rope.offset_to_position(offset);
+                let replace_range = lsp_types::Range::new(start_pos, end_pos);
+
+                let items = vec![
+                    completion_item(
+                        &replace_range,
+                        "/date",
+                        format!("{}", chrono::Local::now().date_naive()).as_str(),
+                        "Insert current date",
+                    ),
+                    completion_item(&replace_range, "/thanks", "Thank you!", "Insert Thank you!"),
+                    completion_item(&replace_range, "/+1", "👍", "Insert 👍"),
+                    completion_item(&replace_range, "/-1", "👎", "Insert 👎"),
+                    completion_item(&replace_range, "/smile", "😊", "Insert 😊"),
+                    completion_item(&replace_range, "/sad", "😢", "Insert 😢"),
+                    completion_item(&replace_range, "/launch", "🚀", "Insert 🚀"),
+                ];
+                return Ok(CompletionResponse::Array(items));
+            }
+
             let items = items
                 .iter()
                 .filter(|item| item.label.starts_with(&trigger_character))
                 .take(10)
-                .map(|item| item.clone())
+                .map(|item| {
+                    let mut item = item.clone();
+                    item.insert_text = Some(item.label.replace(&trigger_character, ""));
+                    item
+                })
                 .collect::<Vec<_>>();
 
-            let responses = vec![CompletionResponse::Array(items)];
-
-            Ok(responses)
+            Ok(CompletionResponse::Array(items))
         })
     }
 
@@ -889,7 +933,7 @@ fn main() {
         cx.activate(true);
 
         story::create_new_window_with_size(
-            "Code Editor",
+            "Editor",
             Some(size(px(1200.), px(960.))),
             |window, cx| cx.new(|cx| Example::new(name, window, cx)),
             cx,

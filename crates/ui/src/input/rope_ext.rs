@@ -24,7 +24,7 @@ pub trait RopeExt {
 
     /// Return the lines iterator.
     ///
-    /// Each line is including the `\n` at the end, but not `\n`.
+    /// Each line is including the `\r` at the end, but not `\n`.
     fn lines(&self) -> RopeLines;
 
     /// Check is equal to another rope.
@@ -127,7 +127,8 @@ impl RopeExt for Rope {
     fn offset_to_position(&self, offset: usize) -> Position {
         let point = self.offset_to_point(offset);
         let line = self.line(point.row as usize);
-        let character = line.slice(0..point.column as usize).chars().count();
+        let column = line.clip_offset(point.column as usize, sum_tree::Bias::Left);
+        let character = line.slice(0..column).chars().count();
         Position::new(point.row, character as u32)
     }
 

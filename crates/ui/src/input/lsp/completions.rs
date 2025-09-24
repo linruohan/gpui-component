@@ -13,6 +13,8 @@ use crate::input::{
 pub trait CompletionProvider {
     /// Fetches completions based on the given byte offset.
     ///
+    /// - The `offset` is in bytes of current cursor.
+    ///
     /// textDocument/completion
     ///
     /// https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_completion
@@ -23,7 +25,7 @@ pub trait CompletionProvider {
         trigger: CompletionContext,
         window: &mut Window,
         cx: &mut Context<InputState>,
-    ) -> Task<Result<Vec<CompletionResponse>>>;
+    ) -> Task<Result<CompletionResponse>>;
 
     fn resolve_completions(
         &self,
@@ -107,15 +109,13 @@ impl InputState {
         };
 
         let provider_responses =
-            provider.completions(&self.text, start_offset, completion_context, window, cx);
+            provider.completions(&self.text, new_offset, completion_context, window, cx);
         self._context_menu_task = cx.spawn_in(window, async move |editor, cx| {
             let mut completions: Vec<CompletionItem> = vec![];
             if let Some(provider_responses) = provider_responses.await.ok() {
-                for resp in provider_responses {
-                    match resp {
-                        CompletionResponse::Array(items) => completions.extend(items),
-                        CompletionResponse::List(list) => completions.extend(list.items),
-                    }
+                match provider_responses {
+                    CompletionResponse::Array(items) => completions.extend(items),
+                    CompletionResponse::List(list) => completions.extend(list.items),
                 }
             }
 
