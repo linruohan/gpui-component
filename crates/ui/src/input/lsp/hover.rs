@@ -1,6 +1,6 @@
 use anyhow::Result;
 use gpui::{App, Context, Task, Window};
-use rope::Rope;
+use ropey::Rope;
 
 use crate::input::{popovers::HoverPopover, InputState, RopeExt};
 
@@ -28,6 +28,10 @@ impl InputState {
         window: &mut Window,
         cx: &mut Context<InputState>,
     ) {
+        if self.selecting {
+            return;
+        }
+
         let Some(provider) = self.lsp.hover_provider.clone() else {
             return;
         };
