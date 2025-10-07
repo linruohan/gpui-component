@@ -565,7 +565,7 @@ impl Calendar {
             cx,
         )
         .when(is_today && !is_active, |this| {
-            this.border_1().border_color(green())
+            this.border_1().border_color(cx.theme().border)
         }) // Add border for today
         .when(!disabled, |this| {
             this.on_click(window.listener_for(
@@ -770,7 +770,7 @@ impl Calendar {
             })
             .when(active, |this| {
                 // this.bg(cx.theme().primary)
-                // .text_color(cx.theme().primary_foreground)
+                //     .text_color(cx.theme().primary_foreground)
                 this.border_1().border_color(blue()).rounded(px(20.0))
             })
             .child(

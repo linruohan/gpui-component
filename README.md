@@ -1,4 +1,4 @@
-电池充电于# GPUI Component
+# GPUI Component
 
 [![Build Status](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml/badge.svg)](https://github.com/longbridge/gpui-component/actions/workflows/ci.yml)
 
