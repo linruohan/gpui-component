@@ -622,6 +622,7 @@ impl Calendar {
             .child(
                 Button::new("prev")
                     .icon(IconName::ArrowLeft)
+                    .tab_stop(false)
                     .ghost()
                     .disabled(disabled)
                     .with_size(icon_size)
@@ -645,6 +646,7 @@ impl Calendar {
                                 .ghost()
                                 .label(state.month_name(0))
                                 .compact()
+                                .tab_stop(false)
                                 .with_size(self.size)
                                 .selected(view_mode.is_month())
                                 .on_click(window.listener_for(
@@ -664,6 +666,7 @@ impl Calendar {
                                 .ghost()
                                 .label(current_year.to_string())
                                 .compact()
+                                .tab_stop(false)
                                 .with_size(self.size)
                                 .selected(view_mode.is_year())
                                 .on_click(window.listener_for(
@@ -699,6 +702,7 @@ impl Calendar {
                 Button::new("next")
                     .icon(IconName::ArrowRight)
                     .ghost()
+                    .tab_stop(false)
                     .disabled(disabled)
                     .with_size(icon_size)
                     .when(view_mode.is_day(), |this| {

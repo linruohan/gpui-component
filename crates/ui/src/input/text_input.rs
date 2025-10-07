@@ -31,6 +31,7 @@ pub struct TextInput {
     disabled: bool,
     bordered: bool,
     focus_bordered: bool,
+    tab_index: isize,
 }
 
 impl Sizable for TextInput {
@@ -56,6 +57,7 @@ impl TextInput {
             disabled: false,
             bordered: true,
             focus_bordered: true,
+            tab_index: 0,
         }
     }
 
@@ -117,11 +119,18 @@ impl TextInput {
         self
     }
 
+    /// Set the tab index for the input, default is 0.
+    pub fn tab_index(mut self, index: isize) -> Self {
+        self.tab_index = index;
+        self
+    }
+
     fn render_toggle_mask_button(state: Entity<InputState>) -> impl IntoElement {
         Button::new("toggle-mask")
             .icon(IconName::Eye)
             .xsmall()
             .ghost()
+            .tab_stop(false)
             .on_mouse_down(MouseButton::Left, {
                 let state = state.clone();
                 move |_, window, cx| {
@@ -239,11 +248,11 @@ impl RenderOnce for TextInput {
         let bg = if state.disabled {
             cx.theme().muted
         } else {
-            cx.theme()
-                .highlight_theme
-                .style
-                .background
-                .unwrap_or(cx.theme().background)
+            if state.mode.is_code_editor() {
+                cx.theme().editor_background()
+            } else {
+                cx.theme().background
+            }
         };
 
         let prefix = self.prefix;
@@ -256,7 +265,8 @@ impl RenderOnce for TextInput {
             .id(("input", self.state.entity_id()))
             .flex()
             .key_context(crate::input::CONTEXT)
-            .track_focus(&state.focus_handle)
+            .track_focus(&state.focus_handle.clone())
+            .tab_index(self.tab_index)
             .when(!state.disabled, |this| {
                 this.on_action(window.listener_for(&self.state, InputState::backspace))
                     .on_action(window.listener_for(&self.state, InputState::delete))
@@ -392,6 +402,7 @@ impl RenderOnce for TextInput {
                                 move |_, window, cx| {
                                     state.update(cx, |state, cx| {
                                         state.clean(window, cx);
+                                        state.focus(window, cx);
                                     })
                                 }
                             }))
