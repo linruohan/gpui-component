@@ -1,13 +1,14 @@
 use gpui::{
-    div, linear_color_stop, linear_gradient, prelude::FluentBuilder, px, App, AppContext, Context,
-    Entity, FocusHandle, Focusable, Hsla, IntoElement, ParentElement, Render, SharedString, Styled,
-    Window,
+    App, AppContext, Context, Entity, FocusHandle, Focusable, Hsla, IntoElement, ParentElement,
+    Render, SharedString, Styled, Window, div, linear_color_stop, linear_gradient,
+    prelude::FluentBuilder, px,
 };
 use gpui_component::{
+    ActiveTheme, StyledExt,
     chart::{AreaChart, BarChart, LineChart, PieChart},
     divider::Divider,
     dock::PanelControl,
-    h_flex, v_flex, ActiveTheme, StyledExt,
+    h_flex, v_flex,
 };
 use serde::Deserialize;
 

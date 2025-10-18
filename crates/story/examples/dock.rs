@@ -1,10 +1,10 @@
 use anyhow::{Context as _, Result};
 use gpui::*;
 use gpui_component::{
+    IconName, Root, Sizable,
     button::{Button, ButtonVariants as _},
     dock::{ClosePanel, DockArea, DockAreaState, DockEvent, DockItem, DockPlacement, ToggleZoom},
     popup_menu::PopupMenuExt,
-    IconName, Root, Sizable,
 };
 
 use serde::Deserialize;
