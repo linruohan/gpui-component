@@ -1,8 +1,8 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Window, px,
+    px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
+    Window,
 };
-use gpui_component::{ActiveTheme as _, IconName, Sizable, indicator::Indicator, v_flex};
+use gpui_component::{indicator::Indicator, v_flex, ActiveTheme as _, IconName, Sizable};
 
 use crate::section;
 

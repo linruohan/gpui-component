@@ -1,10 +1,9 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding, ParentElement,
-    Render, StatefulInteractiveElement, Styled, Window, actions, div,
+    actions, div, App, AppContext, Context, Entity, Focusable, InteractiveElement, KeyBinding,
+    ParentElement, Render, StatefulInteractiveElement, Styled, Window,
 };
 
 use gpui_component::{
-    ActiveTheme, IconName,
     button::{Button, ButtonVariant, ButtonVariants},
     checkbox::Checkbox,
     dock::PanelControl,
@@ -12,10 +11,10 @@ use gpui_component::{
     radio::Radio,
     switch::Switch,
     tooltip::Tooltip,
-    v_flex,
+    v_flex, ActiveTheme, IconName,
 };
 
-use crate::{Story, section};
+use crate::{section, Story};
 
 actions!(tooltip_story, [Info]);
 

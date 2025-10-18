@@ -1,11 +1,10 @@
 use gpui::{
-    AnyElement, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement,
-    ParentElement as _, Pixels, Render, SharedString, Styled, Window, div, px,
+    div, px, AnyElement, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement,
+    ParentElement as _, Pixels, Render, SharedString, Styled, Window,
 };
 use gpui_component::{
-    ActiveTheme,
-    resizable::{ResizableState, h_resizable, resizable_panel, v_resizable},
-    v_flex,
+    resizable::{h_resizable, resizable_panel, v_resizable, ResizableState},
+    v_flex, ActiveTheme,
 };
 
 pub struct ResizableStory {

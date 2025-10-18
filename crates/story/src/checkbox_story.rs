@@ -1,10 +1,10 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Window, div, px,
+    div, px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window,
 };
 
 use gpui_component::{
-    ActiveTheme, Disableable as _, Sizable, checkbox::Checkbox, h_flex, text::TextView, v_flex,
+    checkbox::Checkbox, h_flex, text::TextView, v_flex, ActiveTheme, Disableable as _, Sizable,
 };
 
 use crate::section;

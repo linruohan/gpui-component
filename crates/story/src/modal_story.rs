@@ -1,10 +1,9 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    ParentElement, Render, SharedString, Styled, Window, div, px,
+    div, px, App, AppContext, Context, Entity, FocusHandle, Focusable, InteractiveElement as _,
+    IntoElement, ParentElement, Render, SharedString, Styled, Window,
 };
 
 use gpui_component::{
-    ActiveTheme, ContextModal as _, Icon, IconName,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     date_picker::{DatePicker, DatePickerState},
@@ -13,10 +12,10 @@ use gpui_component::{
     input::{InputState, TextInput},
     modal::ModalButtonProps,
     text::TextView,
-    v_flex,
+    v_flex, ActiveTheme, ContextModal as _, Icon, IconName,
 };
 
-use crate::{TestAction, section};
+use crate::{section, TestAction};
 
 pub struct ModalStory {
     focus_handle: FocusHandle,

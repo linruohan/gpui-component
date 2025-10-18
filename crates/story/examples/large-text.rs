@@ -1,10 +1,9 @@
 use gpui::*;
 use gpui_component::{
-    ActiveTheme, ContextModal, Selectable, Sizable,
     button::{Button, ButtonVariants as _},
     h_flex,
     input::{self, InputEvent, InputState, TabSize, TextInput},
-    v_flex,
+    v_flex, ActiveTheme, ContextModal, Selectable, Sizable,
 };
 use story::Assets;
 

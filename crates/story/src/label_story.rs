@@ -1,16 +1,15 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, SharedString,
-    Styled, Subscription, Window, div, px, rems,
+    div, px, rems, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render,
+    SharedString, Styled, Subscription, Window,
 };
 
 use gpui_component::{
-    IconName, StyledExt,
     button::{Button, ButtonVariant, ButtonVariants as _},
     checkbox::Checkbox,
     green_500, h_flex,
     input::{InputEvent, InputState, TextInput},
     label::{HighlightsMatch, Label},
-    v_flex,
+    v_flex, IconName, StyledExt,
 };
 
 use crate::section;

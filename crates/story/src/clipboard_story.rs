@@ -4,11 +4,10 @@ use gpui::{
 };
 
 use gpui_component::{
-    ContextModal,
     clipboard::Clipboard,
     input::{InputState, TextInput},
     label::Label,
-    v_flex,
+    v_flex, ContextModal,
 };
 
 use crate::section;

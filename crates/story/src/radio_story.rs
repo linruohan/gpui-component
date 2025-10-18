@@ -1,12 +1,12 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render, Styled,
-    Window, div, px,
+    div, px, App, AppContext, Context, Entity, Focusable, IntoElement, ParentElement, Render,
+    Styled, Window,
 };
 
 use gpui_component::{
-    ActiveTheme, Sizable, h_flex,
+    h_flex,
     radio::{Radio, RadioGroup},
-    v_flex,
+    v_flex, ActiveTheme, Sizable,
 };
 
 use crate::section;

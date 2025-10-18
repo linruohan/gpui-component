@@ -1,12 +1,11 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement, Render,
-    Styled, Window, px,
+    px, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement,
+    Render, Styled, Window,
 };
 use gpui_component::{
-    ActiveTheme, IconName, Sizable as _, StyledExt,
     avatar::{Avatar, AvatarGroup},
     dock::PanelControl,
-    v_flex,
+    v_flex, ActiveTheme, IconName, Sizable as _, StyledExt,
 };
 
 use crate::section;

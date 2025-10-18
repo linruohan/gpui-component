@@ -1,15 +1,14 @@
 use gpui::{
-    App, AppContext as _, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Styled, Subscription, Window, div,
+    div, App, AppContext as _, Context, Entity, Focusable, InteractiveElement, IntoElement,
+    ParentElement as _, Render, Styled, Subscription, Window,
 };
 use regex::Regex;
 
 use crate::section;
 use gpui_component::{
-    ActiveTheme, Disableable, IconName, Sizable,
     button::{Button, ButtonVariants},
     input::{InputEvent, InputState, MaskPattern, NumberInput, NumberInputEvent, StepAction},
-    v_flex,
+    v_flex, ActiveTheme, Disableable, IconName, Sizable,
 };
 
 pub fn init(_: &mut App) {}

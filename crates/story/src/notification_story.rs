@@ -4,11 +4,10 @@ use gpui::{
 };
 
 use gpui_component::{
-    ContextModal as _,
     button::{Button, ButtonVariants},
     notification::{Notification, NotificationType},
     text::TextView,
-    v_flex,
+    v_flex, ContextModal as _,
 };
 
 use crate::section;

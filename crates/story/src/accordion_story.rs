@@ -1,15 +1,14 @@
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled as _, Window, prelude::FluentBuilder as _,
+    prelude::FluentBuilder as _, App, AppContext, Context, Entity, FocusHandle, Focusable,
+    IntoElement, ParentElement as _, Render, Styled as _, Window,
 };
 use gpui_component::{
-    IconName, Selectable, Sizable, Size,
     accordion::Accordion,
     button::{Button, ButtonGroup},
     checkbox::Checkbox,
     h_flex,
     switch::Switch,
-    v_flex,
+    v_flex, IconName, Selectable, Sizable, Size,
 };
 
 use crate::section;

@@ -1,7 +1,7 @@
 use crate::section;
 use gpui::{
-    App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
-    Render, Styled, Window, img,
+    img, App, AppContext, Context, Entity, FocusHandle, Focusable, IntoElement, ParentElement as _,
+    Render, Styled, Window,
 };
 use gpui_component::{dock::PanelControl, v_flex};
 

@@ -1,12 +1,12 @@
 use anyhow::{Context as _, Result};
 use gpui::*;
 use gpui_component::{
-    ActiveTheme, Root, Sizable, TitleBar,
     dock::{
-        DockArea, DockAreaState, DockEvent, DockItem, Panel, PanelEvent, PanelInfo, PanelRegistry,
-        PanelState, PanelView, register_panel,
+        register_panel, DockArea, DockAreaState, DockEvent, DockItem, Panel, PanelEvent, PanelInfo,
+        PanelRegistry, PanelState, PanelView,
     },
     input::{InputState, TextInput},
+    ActiveTheme, Root, Sizable, TitleBar,
 };
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};

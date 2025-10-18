@@ -1,15 +1,14 @@
 use gpui::{
-    App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement, IntoElement,
-    ParentElement as _, Render, Styled, Window, px,
+    px, App, AppContext as _, ClickEvent, Context, Entity, Focusable, InteractiveElement,
+    IntoElement, ParentElement as _, Render, Styled, Window,
 };
 
 use crate::section;
 use gpui_component::{
-    Sizable,
     button::Button,
     h_flex,
     input::{InputState, TextInput},
-    v_flex,
+    v_flex, Sizable,
 };
 
 pub fn init(_: &mut App) {}

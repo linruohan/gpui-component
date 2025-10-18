@@ -1,14 +1,13 @@
 use gpui::{
-    App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement, Render,
-    SharedString, Styled, Subscription, Window, hsla, px,
+    hsla, px, App, AppContext, Context, Entity, Focusable, Hsla, IntoElement, ParentElement,
+    Render, SharedString, Styled, Subscription, Window,
 };
 use gpui_component::{
-    ActiveTheme, Colorize as _, ContextModal, StyledExt,
     checkbox::Checkbox,
     clipboard::Clipboard,
     h_flex,
     slider::{Slider, SliderEvent, SliderState},
-    v_flex,
+    v_flex, ActiveTheme, Colorize as _, ContextModal, StyledExt,
 };
 
 use crate::section;
