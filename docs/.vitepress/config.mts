@@ -33,6 +33,15 @@ const config: UserConfig = {
       {
         rel: "icon",
         href: "/gpui-component/logo.svg",
+        media: "(prefers-color-scheme: light)",
+      },
+    ],
+    [
+      "link",
+      {
+        rel: "icon",
+        href: "/gpui-component/logo-dark.svg",
+        media: "(prefers-color-scheme: dark)",
       },
     ],
   ],
@@ -40,13 +49,29 @@ const config: UserConfig = {
     plugins: [llmstxt(), tailwindcss()],
   },
   themeConfig: {
-    logo: "/logo.svg",
+    logo: {
+      light: "/logo.svg",
+      dark: "/logo-dark.svg",
+    },
+    footer: {
+      message:
+        "GPUI Component is an open source project under the Apache-2.0 License, developed by <a href='https://longbridge.com' target='_blank'>Longbridge</a>.",
+      copyright: `
+      <a href="/gpui-component/contributors">Contributors</a>
+      |
+      <a href="/gpui-component/llms-full.txt" target="_blank">llms-full.txt</a>
+      |
+      <a href="https://github.com/longbridge/gpui-component/issues" target="_blank">Report Bug</a>
+      |
+      <a href="https://github.com/longbridge/gpui-component/discussions" target="_blank">Discussion</a>
+      `,
+    },
     // https://vitepress.dev/reference/default-theme-config
     nav: [
       { text: "Home", link: "/" },
       { text: "Getting Started", link: "/docs/getting-started" },
       { text: "Components", link: "/docs/components" },
-      { text: "Docs", link: "https://docs.rs/gpui-component" },
+      { text: "API Doc", link: "https://docs.rs/gpui-component" },
       {
         text: "Resources",
         items: [

@@ -712,6 +712,7 @@ pub(super) struct PrepaintState {
     search_match_paths: Vec<(Path<Pixels>, bool)>,
     document_color_paths: Vec<(Path<Pixels>, Hsla)>,
     hover_definition_hitbox: Option<Hitbox>,
+    indent_guides_path: Option<Path<Pixels>>,
     bounds: Bounds<Pixels>,
 }
 
@@ -974,14 +975,14 @@ impl Element for TextElement {
         last_layout.lines = Rc::new(lines);
 
         let total_wrapped_lines = state.text_wrapper.len();
-        let empty_bottom_height = if state.mode.is_auto_grow() || state.mode.is_single_line() {
-            px(0.)
-        } else {
+        let empty_bottom_height = if state.mode.is_code_editor() {
             bounds
                 .size
                 .height
                 .half()
                 .max(BOTTOM_MARGIN_ROWS * line_height)
+        } else {
+            px(0.)
         };
 
         let scroll_size = size(
@@ -1083,6 +1084,7 @@ impl Element for TextElement {
         };
 
         let hover_definition_hitbox = self.layout_hover_definition_hitbox(state, window, cx);
+        let indent_guides_path = self.layout_indent_guides(state, &last_layout);
 
         PrepaintState {
             bounds,
@@ -1097,6 +1099,7 @@ impl Element for TextElement {
             hover_highlight_path,
             hover_definition_hitbox,
             document_color_paths,
+            indent_guides_path,
         }
     }
 
@@ -1187,6 +1190,11 @@ impl Element for TextElement {
                 }
                 offset_y += height;
             }
+        }
+
+        // Paint indent guides
+        if let Some(path) = prepaint.indent_guides_path.take() {
+            window.paint_path(path, cx.theme().secondary);
         }
 
         // Paint selections
@@ -1283,9 +1291,7 @@ impl Element for TextElement {
             state.set_input_bounds(input_bounds, cx);
             state.last_selected_range = Some(selected_range);
             state.scroll_size = prepaint.scroll_size;
-            state
-                .scroll_handle
-                .set_offset(prepaint.cursor_scroll_offset);
+            state.update_scroll_offset(Some(prepaint.cursor_scroll_offset), cx);
             state.deferred_scroll_offset = None;
 
             cx.notify();
