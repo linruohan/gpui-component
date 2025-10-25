@@ -181,7 +181,7 @@ impl RenderOnce for SidebarBoardItem {
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
             .size(size)
-            .bg(self.colors[color_idx].darken(0.85))
+            .bg(self.colors[color_idx])
             .rounded(cx.theme().radius)
             .child(
                 v_flex()
