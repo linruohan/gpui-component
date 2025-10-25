@@ -1,5 +1,5 @@
 use crate::{
-    h_flex, label::Label, v_flex, ActiveTheme as _, Collapsible, Colorize, Icon, IconName,
+    ActiveTheme as _, Collapsible, Colorize, Icon, IconName, Theme, h_flex, label::Label, v_flex
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, AnyElement, App, ClickEvent, ElementId, Hsla,
@@ -65,9 +65,8 @@ pub struct SidebarBoardItem {
     handler: Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>,
     active: bool,
     collapsed: bool,
-    board_bg: Hsla,
-    board_text_color: Hsla,
-    board_count: usize,
+    colors: Vec<Hsla>,
+    count: usize,
     size: Length,
     children: Vec<Self>,
     suffix: Option<AnyElement>,
@@ -77,8 +76,7 @@ impl SidebarBoardItem {
     /// Create a new SidebarBoardItem with a label
     pub fn new(
         label: impl Into<SharedString>,
-        bg: Hsla,
-        color: Hsla,
+        colors: Vec<Hsla>,
         count: usize,
         icon_name: IconName,
     ) -> Self {
@@ -88,9 +86,8 @@ impl SidebarBoardItem {
             label: label.into(),
             handler: Rc::new(|_, _, _| {}),
             active: false,
-            board_bg: bg,
-            board_count: count,
-            board_text_color: color,
+            count,
+            colors,
             size: Length::Auto,
             collapsed: false,
             children: Vec::new(),
@@ -108,17 +105,13 @@ impl SidebarBoardItem {
         self.id = id.into();
         self
     }
-    /// Set id to the menu item.
-    pub fn bg(mut self, id: Hsla) -> Self {
-        self.board_bg = id;
-        self
-    }
+ 
     pub fn count(mut self, count: usize) -> Self {
-        self.board_count = count;
+        self.count = count;
         self
     }
-    pub fn color(mut self, color: Hsla) -> Self {
-        self.board_text_color = color;
+    pub fn colors(mut self, colors: Vec<Hsla>) -> Self {
+        self.colors = colors;
         self
     }
     pub fn size(mut self, size: Length) -> Self {
@@ -165,8 +158,9 @@ impl RenderOnce for SidebarBoardItem {
         let is_collapsed = self.collapsed;
         let is_active = self.active;
         let size = self.size;
-        let board_text_color = self.board_text_color;
-        let board_count = self.board_count;
+        let theme_mode=Theme::global(cx).mode;
+        let color = if theme_mode.is_dark(){self.colors[0]}else{self.colors[1]};
+        let count = self.count;
 
         v_flex()
             .id(self.id.clone())
@@ -175,7 +169,7 @@ impl RenderOnce for SidebarBoardItem {
             .w_full()
             .when(is_active, |this| {
                 this.border_1()
-                    .border_color(self.board_text_color)
+                    .border_color(color)
                     .bg(cx.theme().sidebar_accent)
             })
             // .bg(self.board_bg.darken(10.0))
@@ -187,7 +181,7 @@ impl RenderOnce for SidebarBoardItem {
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
             .size(size)
-            .bg(self.board_bg.darken(0.85))
+            .bg(color.clone().darken(0.85))
             .rounded(cx.theme().radius)
             .child(
                 v_flex()
@@ -217,13 +211,13 @@ impl RenderOnce for SidebarBoardItem {
                                     .justify_between() // 子元素横向两端对齐
                                     .children([
                                         div().when_some(self.icon.clone(), |this, icon| {
-                                            this.child(icon.text_color(self.board_text_color))
+                                            this.child(icon.text_color(color))
                                         }),
-                                        div().when(self.board_count > 0, |this| {
+                                        div().when(self.count > 0, |this| {
                                             this.child(
-                                                Label::new(board_count.to_string())
+                                                Label::new(count.to_string())
                                                     .text_right()
-                                                    .text_color(self.board_text_color),
+                                                    .text_color(color),
                                             )
                                         }),
                                     ]),
@@ -232,7 +226,7 @@ impl RenderOnce for SidebarBoardItem {
                                     div().child(
                                         Label::new(self.label.clone())
                                             .text_left()
-                                            .text_color(board_text_color),
+                                            .text_color(color),
                                     ), // 左下角
                                     div()
                                         .when(is_active, |this| {
