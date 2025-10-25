@@ -1,5 +1,5 @@
 use crate::{
-    ActiveTheme as _, Collapsible, Colorize, Icon, IconName, Theme, h_flex, label::Label, v_flex
+    h_flex, label::Label, v_flex, ActiveTheme as _, Collapsible, Colorize, Icon, IconName, Theme,
 };
 use gpui::{
     div, prelude::FluentBuilder as _, px, relative, AnyElement, App, ClickEvent, ElementId, Hsla,
@@ -105,7 +105,7 @@ impl SidebarBoardItem {
         self.id = id.into();
         self
     }
- 
+
     pub fn count(mut self, count: usize) -> Self {
         self.count = count;
         self
@@ -158,8 +158,8 @@ impl RenderOnce for SidebarBoardItem {
         let is_collapsed = self.collapsed;
         let is_active = self.active;
         let size = self.size;
-        let theme_mode=Theme::global(cx).mode;
-        let color_idx = if theme_mode.is_dark(){0}else{1};
+        let theme_mode = Theme::global(cx).mode;
+        let color_idx = if theme_mode.is_dark() { 0 } else { 1 };
         let count = self.count;
 
         v_flex()
@@ -181,7 +181,11 @@ impl RenderOnce for SidebarBoardItem {
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
             .size(size)
-            .bg(self.colors[color_idx])
+            .bg(if color_idx == 0 {
+                self.colors[color_idx].darken(0.85)
+            } else {
+                self.colors[color_idx].lighten(0.85)
+            })
             .rounded(cx.theme().radius)
             .child(
                 v_flex()
