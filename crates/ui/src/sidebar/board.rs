@@ -159,7 +159,7 @@ impl RenderOnce for SidebarBoardItem {
         let is_active = self.active;
         let size = self.size;
         let theme_mode=Theme::global(cx).mode;
-        let color = if theme_mode.is_dark(){self.colors[0]}else{self.colors[1]};
+        let color_idx = if theme_mode.is_dark(){0}else{1};
         let count = self.count;
 
         v_flex()
@@ -169,7 +169,7 @@ impl RenderOnce for SidebarBoardItem {
             .w_full()
             .when(is_active, |this| {
                 this.border_1()
-                    .border_color(color)
+                    .border_color(self.colors[color_idx])
                     .bg(cx.theme().sidebar_accent)
             })
             // .bg(self.board_bg.darken(10.0))
@@ -181,7 +181,7 @@ impl RenderOnce for SidebarBoardItem {
                     .text_color(cx.theme().sidebar_accent_foreground)
             })
             .size(size)
-            .bg(color.clone().darken(0.85))
+            .bg(self.colors[color_idx].darken(0.85))
             .rounded(cx.theme().radius)
             .child(
                 v_flex()
@@ -211,13 +211,13 @@ impl RenderOnce for SidebarBoardItem {
                                     .justify_between() // 子元素横向两端对齐
                                     .children([
                                         div().when_some(self.icon.clone(), |this, icon| {
-                                            this.child(icon.text_color(color))
+                                            this.child(icon.text_color(self.colors[color_idx]))
                                         }),
                                         div().when(self.count > 0, |this| {
                                             this.child(
                                                 Label::new(count.to_string())
                                                     .text_right()
-                                                    .text_color(color),
+                                                    .text_color(self.colors[color_idx]),
                                             )
                                         }),
                                     ]),
@@ -226,7 +226,7 @@ impl RenderOnce for SidebarBoardItem {
                                     div().child(
                                         Label::new(self.label.clone())
                                             .text_left()
-                                            .text_color(color),
+                                            .text_color(self.colors[color_idx]),
                                     ), // 左下角
                                     div()
                                         .when(is_active, |this| {
