@@ -11,8 +11,7 @@ The Menu component provides both context menus (right-click menus) and popup men
 
 ```rust
 use gpui_component::{
-    context_menu::ContextMenuExt,
-    popup_menu::{PopupMenu, PopupMenuExt},
+    menu::{PopupMenu, PopupMenuItem, ContextMenuExt, DropdownMenu},
     Button
 };
 use gpui::{actions, Action};
@@ -20,7 +19,7 @@ use gpui::{actions, Action};
 
 ## Usage
 
-### Context Menu
+### ContextMenu
 
 Context menus appear when right-clicking on an element:
 
@@ -37,33 +36,53 @@ div()
     })
 ```
 
-### Popup Menu
+### DropdownMenu
 
-Popup menus are triggered by buttons or other interactive elements:
+Dropdown menus are triggered by buttons or other interactive elements:
 
 ```rust
-use gpui_component::popup_menu::PopupMenuExt;
+use gpui_component::popup_menu::{PopupMenuExt as _, PopupMenuItem};
 
+let view = cx.entity();
 Button::new("menu-btn")
     .label("Open Menu")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.menu("New File", Box::new(NewFile))
             .menu("Open File", Box::new(OpenFile))
+            .link("Documentation", "https://longbridge.github.io/gpui-component/")
+            .separator()
+            .item(PopupMenuItem::new("Custom Action")
+                .on_click(window.listener_for(&view, |this, _, window, cx| {
+                    // Custom action logic here
+                    this.
+                })
+            )
             .separator()
             .menu("Exit", Box::new(Exit))
     })
 ```
 
+:::tip
+As you see, the each menu item is associated with an [Action],
+we choice this design to better integrate with GPUI's action and key binding system,
+allowing menu items to automatically display keyboard shortcuts when applicable.
+
+So, the [Action] is the recommended way to define menu item behaviors.
+
+However, if you prefer not to use [Action]s, you can create custom menu items using the `item` method along with [PopupMenuItem].
+There have a `on_click` callback to handle the click event directly.
+:::
+
 ### Menu with Anchor Position
 
-Control where the popup menu appears relative to the trigger:
+Control where the dropdown menu appears relative to the trigger:
 
 ```rust
 use gpui::Corner;
 
 Button::new("menu-btn")
     .label("Options")
-    .popup_menu_with_anchor(Corner::TopRight, |menu, window, cx| {
+    .dropdown_menu_with_anchor(Corner::TopRight, |menu, window, cx| {
         menu.menu("Option 1", Box::new(Action1))
             .menu("Option 2", Box::new(Action2))
     })
@@ -253,7 +272,7 @@ For menus with many items, enable scrolling:
 ```rust
 Button::new("large-menu")
     .label("Many Options")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         let mut menu = menu
             .scrollable()
             .max_h(px(300.))
@@ -328,11 +347,11 @@ div()
 Sometimes you may not like to define an action for a menu item, you just want add a `on_click` handler, in this case, the `item` and [PopupMenuItem] can help you:
 
 ```rust
-use gpui_component::{popup_menu::PopupMenuItem, Button};
+use gpui_component::{menu::PopupMenuItem, Button};
 
 Button::new("custom-item-menu")
     .label("Options")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.item(
             PopupMenuItem::new("Custom Action")
                 .disabled(false)
@@ -366,7 +385,7 @@ let editor_focus = cx.focus_handle();
 
 Button::new("editor-menu")
     .label("Edit")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.action_context(editor_focus)
             .menu("Save", Box::new(Save))           // Shows "Ctrl+S"
             .menu("Save As...", Box::new(SaveAs))   // Shows "Ctrl+Shift+S"
@@ -383,7 +402,7 @@ Button::new("editor-menu")
 ```rust
 Button::new("settings")
     .label("Settings")
-    .popup_menu(|menu, window, cx| {
+    .dropdown_menu(|menu, window, cx| {
         menu.label("Display")
             .menu_element_with_check(dark_mode, Box::new(ToggleDarkMode), |window, cx| {
                 h_flex()
@@ -439,6 +458,7 @@ Button::new("settings")
 7. **Clear Labels**: Use descriptive, action-oriented labels
 8. **Reasonable Limits**: Use scrollable menus for more than 10-15 items
 
-[PopupMenu]: https://docs.rs/gpui-component/latest/gpui_component/menu/popup_menu/struct.PopupMenu.html
-[PopupMenuItem]: https://docs.rs/gpui-component/latest/gpui_component/menu/popup_menu/struct.PopupMenuItem.html
-[context_menu]: https://docs.rs/gpui-component/latest/gpui_component/menu/context_menu/trait.ContextMenuExt.html#method.context_menu
+[PopupMenu]: https://docs.rs/gpui-component/latest/gpui_component/menu/struct.PopupMenu.html
+[PopupMenuItem]: https://docs.rs/gpui-component/latest/gpui_component/menu/struct.PopupMenuItem.html
+[context_menu]: https://docs.rs/gpui-component/latest/gpui_component/menu/trait.ContextMenuExt.html#method.context_menu
+[Action]: https://docs.rs/gpui/latest/gpui/trait.Action.html
