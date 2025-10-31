@@ -3,7 +3,7 @@ use crate::actions::{SelectLeft, SelectRight};
 use crate::menu::menu_item::MenuItemElement;
 use crate::scroll::{Scrollbar, ScrollbarState};
 use crate::{h_flex, v_flex, ActiveTheme, Icon, IconName, Sizable as _};
-use crate::{Kbd, Side, Size, StyledExt};
+use crate::{kbd::Kbd, Side, Size, StyledExt};
 use gpui::{
     anchored, canvas, div, prelude::FluentBuilder, px, rems, Action, AnyElement, App, AppContext,
     Bounds, Context, Corner, DismissEvent, Edges, Entity, EventEmitter, FocusHandle, Focusable,
@@ -246,6 +246,15 @@ impl PopupMenuItem {
     #[inline]
     fn is_separator(&self) -> bool {
         matches!(self, PopupMenuItem::Separator)
+    }
+
+    fn has_icon(&self) -> bool {
+        match self {
+            PopupMenuItem::Item { icon, .. } => icon.is_some(),
+            PopupMenuItem::ElementItem { icon, .. } => icon.is_some(),
+            PopupMenuItem::Submenu { icon, .. } => icon.is_some(),
+            _ => false,
+        }
     }
 }
 
@@ -617,7 +626,11 @@ impl PopupMenu {
 
     /// Add menu item.
     pub fn item(mut self, item: impl Into<PopupMenuItem>) -> Self {
-        self.menu_items.push(item.into());
+        let item: PopupMenuItem = item.into();
+        if item.has_icon() {
+            self.has_icon = true;
+        }
+        self.menu_items.push(item);
         self
     }
 
