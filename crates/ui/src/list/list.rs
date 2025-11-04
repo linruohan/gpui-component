@@ -16,8 +16,9 @@ use gpui::{
     IntoElement, KeyBinding, Length, MouseButton, ParentElement, Render, Styled, Task, Window,
 };
 use gpui::{
-    px, size, App, AvailableSpace, ClickEvent, Context, Edges, EventEmitter, ListSizingBehavior,
-    Pixels, RenderOnce, ScrollStrategy, SharedString, StatefulInteractiveElement, Subscription,
+    px, size, App, AvailableSpace, ClickEvent, Context, DefiniteLength, EdgesRefinement,
+    EventEmitter, ListSizingBehavior, RenderOnce, ScrollStrategy, SharedString,
+    StatefulInteractiveElement, StyleRefinement, Subscription,
 };
 use rust_i18n::t;
 use smol::Timer;
@@ -43,14 +44,37 @@ pub enum ListEvent {
     Cancel,
 }
 
+struct ListOptions {
+    size: Size,
+    scrollbar_visible: bool,
+    selectable: bool,
+    searchable: bool,
+    search_placeholder: Option<SharedString>,
+    max_height: Option<Length>,
+    paddings: EdgesRefinement<DefiniteLength>,
+}
+
+impl Default for ListOptions {
+    fn default() -> Self {
+        Self {
+            size: Size::default(),
+            scrollbar_visible: true,
+            max_height: None,
+            selectable: true,
+            searchable: true,
+            search_placeholder: None,
+            paddings: EdgesRefinement::default(),
+        }
+    }
+}
+
 /// The state for List.
 pub struct ListState<D: ListDelegate> {
     focus_handle: FocusHandle,
+    options: ListOptions,
     query_input: Option<Entity<InputState>>,
     delegate: D,
     last_query: Option<String>,
-    selectable: bool,
-    querying: bool,
     scroll_handle: VirtualListScrollHandle,
     scroll_state: ScrollbarState,
     rows_cache: RowsCache,
@@ -77,6 +101,7 @@ where
 
         Self {
             focus_handle: cx.focus_handle(),
+            options: ListOptions::default(),
             delegate,
             rows_cache: RowsCache::default(),
             query_input: Some(query_input),
@@ -87,40 +112,11 @@ where
             mouse_right_clicked_index: None,
             scroll_handle: VirtualListScrollHandle::new(),
             scroll_state: ScrollbarState::default(),
-            selectable: true,
-            querying: false,
             reset_on_cancel: true,
             _search_task: Task::ready(()),
             _load_more_task: Task::ready(()),
             _query_input_subscription,
         }
-    }
-
-    pub fn no_query(mut self) -> Self {
-        self.query_input = None;
-        self
-    }
-
-    /// Sets whether the list is selectable, default is true.
-    pub fn selectable(mut self, selectable: bool) -> Self {
-        self.selectable = selectable;
-        self
-    }
-
-    pub fn set_query_input(
-        &mut self,
-        query_input: Entity<InputState>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        self._query_input_subscription =
-            cx.subscribe_in(&query_input, window, Self::on_query_input_event);
-        self.query_input = Some(query_input);
-    }
-
-    /// Get the query input entity.
-    pub fn query_input(&self) -> Option<&Entity<InputState>> {
-        self.query_input.as_ref()
     }
 
     pub fn delegate(&self) -> &D {
@@ -222,7 +218,7 @@ where
                     return;
                 }
 
-                self.set_querying(true, window, cx);
+                self.set_searching(true, window, cx);
                 let search = self.delegate.perform_search(&text, window, cx);
 
                 if self.rows_cache.len() > 0 {
@@ -242,7 +238,7 @@ where
                     // Always wait 100ms to avoid flicker
                     Timer::after(Duration::from_millis(100)).await;
                     _ = this.update_in(window, |this, window, cx| {
-                        this.set_querying(false, window, cx);
+                        this.set_searching(false, window, cx);
                     });
                 });
             }
@@ -257,10 +253,9 @@ where
         }
     }
 
-    fn set_querying(&mut self, querying: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.querying = querying;
+    fn set_searching(&mut self, searching: bool, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(input) = &self.query_input {
-            input.update(cx, |input, cx| input.set_loading(querying, window, cx))
+            input.update(cx, |input, cx| input.set_loading(searching, window, cx))
         }
         cx.notify();
     }
@@ -347,9 +342,7 @@ where
             return;
         }
 
-        let prev_ix = self
-            .rows_cache
-            .prev(self.selected_index.unwrap_or(IndexPath::default()));
+        let prev_ix = self.rows_cache.prev(self.selected_index);
         self.select_item(prev_ix, window, cx);
     }
 
@@ -363,9 +356,7 @@ where
             return;
         }
 
-        let next_ix = self
-            .rows_cache
-            .next(self.selected_index.unwrap_or_default());
+        let next_ix = self.rows_cache.next(self.selected_index);
         self.select_item(next_ix, window, cx);
     }
 
@@ -408,8 +399,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let selectable = self.selectable;
-
+        let selectable = self.options.selectable;
         let selected = self.selected_index.map(|s| s.eq_row(ix)).unwrap_or(false);
         let mouse_right_clicked = self
             .mouse_right_clicked_index
@@ -446,6 +436,86 @@ where
                 )
             })
     }
+
+    fn render_items(
+        &self,
+        items_count: usize,
+        entities_count: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let rows_cache = self.rows_cache.clone();
+        let scrollbar_visible = self.options.scrollbar_visible;
+        let scroll_handle = self.scroll_handle.clone();
+        let scroll_state = self.scroll_state.clone();
+        let measured_size = rows_cache.measured_size();
+
+        v_flex()
+            .flex_grow()
+            .relative()
+            .h_full()
+            .min_w(measured_size.item_size.width)
+            .when_some(self.options.max_height, |this, h| this.max_h(h))
+            .overflow_hidden()
+            .when(items_count == 0, |this| {
+                this.child(self.delegate.render_empty(window, cx))
+            })
+            .when(items_count > 0, {
+                |this| {
+                    this.child(
+                        v_virtual_list(
+                            cx.entity(),
+                            "virtual-list",
+                            rows_cache.entries_sizes.clone(),
+                            move |list, visible_range: Range<usize>, window, cx| {
+                                list.load_more_if_need(
+                                    entities_count,
+                                    visible_range.end,
+                                    window,
+                                    cx,
+                                );
+
+                                // NOTE: Here the v_virtual_list would not able to have gap_y,
+                                // because the section header, footer is always have rendered as a empty child item,
+                                // even the delegate give a None result.
+
+                                visible_range
+                                    .map(|ix| {
+                                        let Some(entry) = rows_cache.get(ix) else {
+                                            return div();
+                                        };
+
+                                        div().children(match entry {
+                                            RowEntry::Entry(index) => Some(
+                                                list.render_list_item(index, window, cx)
+                                                    .into_any_element(),
+                                            ),
+                                            RowEntry::SectionHeader(section_ix) => list
+                                                .delegate()
+                                                .render_section_header(section_ix, window, cx)
+                                                .map(|r| r.into_any_element()),
+                                            RowEntry::SectionFooter(section_ix) => list
+                                                .delegate()
+                                                .render_section_footer(section_ix, window, cx)
+                                                .map(|r| r.into_any_element()),
+                                        })
+                                    })
+                                    .collect::<Vec<_>>()
+                            },
+                        )
+                        .paddings(self.options.paddings.clone())
+                        .when(self.options.max_height.is_some(), |this| {
+                            this.with_sizing_behavior(ListSizingBehavior::Infer)
+                        })
+                        .track_scroll(&scroll_handle)
+                        .into_any_element(),
+                    )
+                }
+            })
+            .when(scrollbar_visible, |this| {
+                this.child(Scrollbar::uniform_scroll(&scroll_state, &scroll_handle))
+            })
+    }
 }
 
 impl<D> Focusable for ListState<D>
@@ -453,6 +523,10 @@ where
     D: ListDelegate,
 {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
+        if !self.options.searchable {
+            return self.focus_handle.clone();
+        }
+
         if let Some(query_input) = &self.query_input {
             query_input.focus_handle(cx)
         } else {
@@ -465,202 +539,62 @@ impl<D> Render for ListState<D>
 where
     D: ListDelegate,
 {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
-    }
-}
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.prepare_items_if_needed(window, cx);
 
-/// The List element.
-#[derive(IntoElement)]
-pub struct List<D: ListDelegate + 'static> {
-    state: Entity<ListState<D>>,
-
-    max_height: Option<Length>,
-    paddings: Edges<Pixels>,
-    scrollbar_visible: bool,
-    pub(crate) size: Size,
-}
-
-impl<D> List<D>
-where
-    D: ListDelegate + 'static,
-{
-    /// Create a new List element with the given ListState entity.
-    pub fn new(state: &Entity<ListState<D>>) -> Self {
-        Self {
-            state: state.clone(),
-            max_height: None,
-            paddings: Edges::default(),
-            scrollbar_visible: true,
-            size: Size::default(),
-        }
-    }
-
-    /// Set paddings for the list.
-    pub fn paddings(mut self, paddings: Edges<Pixels>) -> Self {
-        self.paddings = paddings;
-        self
-    }
-
-    pub fn max_h(mut self, max_height: impl Into<Length>) -> Self {
-        self.max_height = Some(max_height.into());
-        self
-    }
-
-    pub fn scrollbar_visible(mut self, visible: bool) -> Self {
-        self.scrollbar_visible = visible;
-        self
-    }
-
-    fn render_items(
-        &self,
-        items_count: usize,
-        entities_count: usize,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
-        self.state.update(cx, |state, cx| {
-            let rows_cache = state.rows_cache.clone();
-
-            let scrollbar_visible = self.scrollbar_visible;
-            let scroll_handle = state.scroll_handle.clone();
-            let scroll_state = state.scroll_state.clone();
-            let measured_size = rows_cache.measured_size();
-
-            v_flex()
-                .flex_grow()
-                .relative()
-                .h_full()
-                .min_w(measured_size.item_size.width)
-                .when_some(self.max_height, |this, h| this.max_h(h))
-                .overflow_hidden()
-                .when(items_count == 0, |this| {
-                    this.child(state.delegate.render_empty(window, cx))
-                })
-                .when(items_count > 0, {
-                    |this| {
-                        this.child(
-                            v_virtual_list(
-                                self.state.clone(),
-                                "virtual-list",
-                                rows_cache.entries_sizes.clone(),
-                                move |list, visible_range: Range<usize>, window, cx| {
-                                    list.load_more_if_need(
-                                        entities_count,
-                                        visible_range.end,
-                                        window,
-                                        cx,
-                                    );
-
-                                    // NOTE: Here the v_virtual_list would not able to have gap_y,
-                                    // because the section header, footer is always have rendered as a empty child item,
-                                    // even the delegate give a None result.
-
-                                    visible_range
-                                        .map(|ix| {
-                                            let Some(entry) = rows_cache.get(ix) else {
-                                                return div();
-                                            };
-
-                                            div().children(match entry {
-                                                RowEntry::Entry(index) => Some(
-                                                    list.render_list_item(index, window, cx)
-                                                        .into_any_element(),
-                                                ),
-                                                RowEntry::SectionHeader(section_ix) => list
-                                                    .delegate()
-                                                    .render_section_header(section_ix, window, cx)
-                                                    .map(|r| r.into_any_element()),
-                                                RowEntry::SectionFooter(section_ix) => list
-                                                    .delegate()
-                                                    .render_section_footer(section_ix, window, cx)
-                                                    .map(|r| r.into_any_element()),
-                                            })
-                                        })
-                                        .collect::<Vec<_>>()
-                                },
-                            )
-                            .paddings(self.paddings)
-                            .when(self.max_height.is_some(), |this| {
-                                this.with_sizing_behavior(ListSizingBehavior::Infer)
-                            })
-                            .track_scroll(&scroll_handle)
-                            .into_any_element(),
-                        )
-                    }
-                })
-                .when(scrollbar_visible, |this| {
-                    this.child(Scrollbar::uniform_scroll(&scroll_state, &scroll_handle))
-                })
-        })
-    }
-}
-
-impl<D> Sizable for List<D>
-where
-    D: ListDelegate + 'static,
-{
-    fn with_size(mut self, size: impl Into<Size>) -> Self {
-        self.size = size.into();
-        self
-    }
-}
-
-impl<D> RenderOnce for List<D>
-where
-    D: ListDelegate + 'static,
-{
-    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let mut loading = false;
-        let mut query_input = None;
-        let mut loading_view = None;
-        let mut initial_view = None;
-
-        self.state.update(cx, |state, cx| {
-            state.prepare_items_if_needed(window, cx);
-
-            // Scroll to the selected item if it is set.
-            if let Some((ix, strategy)) = state.deferred_scroll_to_index.take() {
-                if let Some(item_ix) = state.rows_cache.position_of(&ix) {
-                    state.scroll_handle.scroll_to_item(item_ix, strategy);
-                }
+        // Scroll to the selected item if it is set.
+        if let Some((ix, strategy)) = self.deferred_scroll_to_index.take() {
+            if let Some(item_ix) = self.rows_cache.position_of(&ix) {
+                self.scroll_handle.scroll_to_item(item_ix, strategy);
             }
+        }
 
-            loading = state.delegate().loading(cx);
-            query_input = state.query_input.clone();
-            loading_view = if loading {
-                Some(state.delegate.render_loading(window, cx).into_any_element())
-            } else {
-                None
-            };
-            initial_view = if let Some(input) = &query_input {
-                if input.read(cx).value().is_empty() {
-                    state.delegate.render_initial(window, cx)
-                } else {
-                    None
+        let loading = self.delegate().loading(cx);
+        let query_input = if self.options.searchable {
+            // sync placeholder
+            if let Some(query_input) = &self.query_input {
+                if let Some(placeholder) = &self.options.search_placeholder {
+                    query_input.update(cx, |input, cx| {
+                        input.set_placeholder(placeholder.clone(), window, cx);
+                    });
                 }
+                Some(query_input.clone())
             } else {
                 None
-            };
-        });
+            }
+        } else {
+            None
+        };
 
-        let state = self.state.read(cx);
-        let focus_handle = state.focus_handle.clone();
-        let items_count = state.rows_cache.items_count();
-        let entities_count = state.rows_cache.len();
-        let mouse_right_clicked_index = state.mouse_right_clicked_index;
+        let loading_view = if loading {
+            Some(self.delegate.render_loading(window, cx).into_any_element())
+        } else {
+            None
+        };
+        let initial_view = if let Some(input) = &query_input {
+            if input.read(cx).value().is_empty() {
+                self.delegate.render_initial(window, cx)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let items_count = self.rows_cache.items_count();
+        let entities_count = self.rows_cache.len();
+        let mouse_right_clicked_index = self.mouse_right_clicked_index;
 
         v_flex()
             .key_context("List")
-            .id("list")
-            .track_focus(&focus_handle)
+            .id("list-state")
+            .track_focus(&self.focus_handle)
             .size_full()
             .relative()
             .overflow_hidden()
             .when_some(query_input.clone(), |this, input| {
                 this.child(
                     div()
-                        .map(|this| match self.size {
+                        .map(|this| match self.options.size {
                             Size::Small => this.px_1p5(),
                             _ => this.px_2(),
                         })
@@ -668,7 +602,7 @@ where
                         .border_color(cx.theme().border)
                         .child(
                             Input::new(&input)
-                                .with_size(self.size)
+                                .with_size(self.options.size)
                                 .prefix(
                                     Icon::new(IconName::Search)
                                         .text_color(cx.theme().muted_foreground),
@@ -679,12 +613,11 @@ where
                         ),
                 )
             })
-            .children(loading_view)
             .when(!loading, |this| {
-                this.on_action(window.listener_for(&self.state, ListState::on_action_cancel))
-                    .on_action(window.listener_for(&self.state, ListState::on_action_confirm))
-                    .on_action(window.listener_for(&self.state, ListState::on_action_select_next))
-                    .on_action(window.listener_for(&self.state, ListState::on_action_select_prev))
+                this.on_action(cx.listener(Self::on_action_cancel))
+                    .on_action(cx.listener(Self::on_action_confirm))
+                    .on_action(cx.listener(Self::on_action_select_next))
+                    .on_action(cx.listener(Self::on_action_select_prev))
                     .map(|this| {
                         if let Some(view) = initial_view {
                             this.child(view)
@@ -694,14 +627,103 @@ where
                     })
                     // Click out to cancel right clicked row
                     .when(mouse_right_clicked_index.is_some(), |this| {
-                        this.on_mouse_down_out(window.listener_for(
-                            &self.state,
-                            |this, _, _, cx| {
-                                this.mouse_right_clicked_index = None;
-                                cx.notify();
-                            },
-                        ))
+                        this.on_mouse_down_out(cx.listener(|this, _, _, cx| {
+                            this.mouse_right_clicked_index = None;
+                            cx.notify();
+                        }))
                     })
             })
+            .children(loading_view)
+    }
+}
+
+/// The List element.
+#[derive(IntoElement)]
+pub struct List<D: ListDelegate + 'static> {
+    state: Entity<ListState<D>>,
+    style: StyleRefinement,
+    options: ListOptions,
+}
+
+impl<D> List<D>
+where
+    D: ListDelegate + 'static,
+{
+    /// Create a new List element with the given ListState entity.
+    pub fn new(state: &Entity<ListState<D>>) -> Self {
+        Self {
+            state: state.clone(),
+            style: StyleRefinement::default(),
+            options: ListOptions::default(),
+        }
+    }
+
+    /// Set whether the scrollbar is visible, default is `true`.
+    pub fn scrollbar_visible(mut self, visible: bool) -> Self {
+        self.options.scrollbar_visible = visible;
+        self
+    }
+
+    /// Sets whether the list is selectable, default is true.
+    pub fn selectable(mut self, selectable: bool) -> Self {
+        self.options.selectable = selectable;
+        self
+    }
+
+    /// Sets whether the list is searchable, default is `true`.
+    ///
+    /// When `true`, there will be a search input at the top of the list.
+    pub fn searchable(mut self, searchable: bool) -> Self {
+        self.options.searchable = searchable;
+        self
+    }
+
+    /// Sets the placeholder text for the search input.
+    pub fn search_placeholder(mut self, placeholder: impl Into<SharedString>) -> Self {
+        self.options.search_placeholder = Some(placeholder.into());
+        self
+    }
+}
+
+impl<D> Styled for List<D>
+where
+    D: ListDelegate + 'static,
+{
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl<D> Sizable for List<D>
+where
+    D: ListDelegate + 'static,
+{
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.options.size = size.into();
+        self
+    }
+}
+
+impl<D> RenderOnce for List<D>
+where
+    D: ListDelegate + 'static,
+{
+    fn render(mut self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        // Take paddings, max_height to options, and clear them from style,
+        // because they would be applied to the inner virtual list.
+        self.options.paddings = self.style.padding.clone();
+        self.options.max_height = self.style.max_size.height;
+        self.style.padding = EdgesRefinement::default();
+        self.style.max_size.height = None;
+
+        self.state.update(cx, |state, _| {
+            state.options = self.options;
+        });
+
+        div()
+            .id("list")
+            .size_full()
+            .refine_style(&self.style)
+            .child(self.state.clone())
     }
 }
