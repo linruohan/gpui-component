@@ -47,8 +47,6 @@ pub enum ListEvent {
 struct ListOptions {
     size: Size,
     scrollbar_visible: bool,
-    selectable: bool,
-    searchable: bool,
     search_placeholder: Option<SharedString>,
     max_height: Option<Length>,
     paddings: EdgesRefinement<DefiniteLength>,
@@ -60,8 +58,6 @@ impl Default for ListOptions {
             size: Size::default(),
             scrollbar_visible: true,
             max_height: None,
-            selectable: true,
-            searchable: true,
             search_placeholder: None,
             paddings: EdgesRefinement::default(),
         }
@@ -70,9 +66,9 @@ impl Default for ListOptions {
 
 /// The state for List.
 pub struct ListState<D: ListDelegate> {
-    focus_handle: FocusHandle,
+    pub(crate) focus_handle: FocusHandle,
+    pub(crate) query_input: Entity<InputState>,
     options: ListOptions,
-    query_input: Option<Entity<InputState>>,
     delegate: D,
     last_query: Option<String>,
     scroll_handle: VirtualListScrollHandle,
@@ -83,6 +79,8 @@ pub struct ListState<D: ListDelegate> {
     deferred_scroll_to_index: Option<(IndexPath, ScrollStrategy)>,
     mouse_right_clicked_index: Option<IndexPath>,
     reset_on_cancel: bool,
+    searchable: bool,
+    selectable: bool,
     _search_task: Task<()>,
     _load_more_task: Task<()>,
     _query_input_subscription: Subscription,
@@ -104,9 +102,11 @@ where
             options: ListOptions::default(),
             delegate,
             rows_cache: RowsCache::default(),
-            query_input: Some(query_input),
+            query_input,
             last_query: None,
             selected_index: None,
+            selectable: true,
+            searchable: false,
             item_to_measure_index: IndexPath::default(),
             deferred_scroll_to_index: None,
             mouse_right_clicked_index: None,
@@ -119,6 +119,31 @@ where
         }
     }
 
+    /// Sets whether the list is searchable, default is `false`.
+    ///
+    /// When `true`, there will be a search input at the top of the list.
+    pub fn searchable(mut self, searchable: bool) -> Self {
+        self.searchable = searchable;
+        self
+    }
+
+    pub fn set_searchable(&mut self, searchable: bool, cx: &mut Context<Self>) {
+        self.searchable = searchable;
+        cx.notify();
+    }
+
+    /// Sets whether the list is selectable, default is true.
+    pub fn selectable(mut self, selectable: bool) -> Self {
+        self.selectable = selectable;
+        self
+    }
+
+    /// Sets whether the list is selectable, default is true.
+    pub fn set_selectable(&mut self, selectable: bool, cx: &mut Context<Self>) {
+        self.selectable = selectable;
+        cx.notify();
+    }
+
     pub fn delegate(&self) -> &D {
         &self.delegate
     }
@@ -127,8 +152,14 @@ where
         &mut self.delegate
     }
 
+    /// Focus the list, if the list is searchable, focus the search input.
     pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
         self.focus_handle(cx).focus(window);
+    }
+
+    /// Return true if either the list or the search input is focused.
+    pub(crate) fn is_focused(&self, window: &Window, cx: &App) -> bool {
+        self.focus_handle.is_focused(window) || self.query_input.focus_handle(cx).is_focused(window)
     }
 
     /// Set the selected index of the list,
@@ -139,6 +170,10 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if !self.selectable {
+            return;
+        }
+
         self.selected_index = ix;
         self.delegate.set_selected_index(ix, window, cx);
         self.scroll_to_selected_item(window, cx);
@@ -254,10 +289,8 @@ where
     }
 
     fn set_searching(&mut self, searching: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(input) = &self.query_input {
-            input.update(cx, |input, cx| input.set_loading(searching, window, cx))
-        }
-        cx.notify();
+        self.query_input
+            .update(cx, |input, cx| input.set_loading(searching, window, cx));
     }
 
     /// Dispatch delegate's `load_more` method when the
@@ -325,6 +358,10 @@ where
     }
 
     fn select_item(&mut self, ix: IndexPath, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.selectable {
+            return;
+        }
+
         self.selected_index = Some(ix);
         self.delegate.set_selected_index(Some(ix), window, cx);
         self.scroll_to_selected_item(window, cx);
@@ -399,7 +436,7 @@ where
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let selectable = self.options.selectable;
+        let selectable = self.selectable;
         let selected = self.selected_index.map(|s| s.eq_row(ix)).unwrap_or(false);
         let mouse_right_clicked = self
             .mouse_right_clicked_index
@@ -523,12 +560,8 @@ where
     D: ListDelegate,
 {
     fn focus_handle(&self, cx: &App) -> FocusHandle {
-        if !self.options.searchable {
-            return self.focus_handle.clone();
-        }
-
-        if let Some(query_input) = &self.query_input {
-            query_input.focus_handle(cx)
+        if self.searchable {
+            self.query_input.focus_handle(cx)
         } else {
             self.focus_handle.clone()
         }
@@ -550,18 +583,14 @@ where
         }
 
         let loading = self.delegate().loading(cx);
-        let query_input = if self.options.searchable {
+        let query_input = if self.searchable {
             // sync placeholder
-            if let Some(query_input) = &self.query_input {
-                if let Some(placeholder) = &self.options.search_placeholder {
-                    query_input.update(cx, |input, cx| {
-                        input.set_placeholder(placeholder.clone(), window, cx);
-                    });
-                }
-                Some(query_input.clone())
-            } else {
-                None
+            if let Some(placeholder) = &self.options.search_placeholder {
+                self.query_input.update(cx, |input, cx| {
+                    input.set_placeholder(placeholder.clone(), window, cx);
+                });
             }
+            Some(self.query_input.clone())
         } else {
             None
         };
@@ -591,7 +620,7 @@ where
             .size_full()
             .relative()
             .overflow_hidden()
-            .when_some(query_input.clone(), |this, input| {
+            .when_some(query_input, |this, input| {
                 this.child(
                     div()
                         .map(|this| match self.options.size {
@@ -607,7 +636,7 @@ where
                                     Icon::new(IconName::Search)
                                         .text_color(cx.theme().muted_foreground),
                                 )
-                                .cleanable()
+                                .cleanable(true)
                                 .p_0()
                                 .appearance(false),
                         ),
@@ -661,20 +690,6 @@ where
     /// Set whether the scrollbar is visible, default is `true`.
     pub fn scrollbar_visible(mut self, visible: bool) -> Self {
         self.options.scrollbar_visible = visible;
-        self
-    }
-
-    /// Sets whether the list is selectable, default is true.
-    pub fn selectable(mut self, selectable: bool) -> Self {
-        self.options.selectable = selectable;
-        self
-    }
-
-    /// Sets whether the list is searchable, default is `true`.
-    ///
-    /// When `true`, there will be a search input at the top of the list.
-    pub fn searchable(mut self, searchable: bool) -> Self {
-        self.options.searchable = searchable;
         self
     }
 

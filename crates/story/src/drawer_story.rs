@@ -243,7 +243,7 @@ impl DrawerStory {
             matches: items.clone(),
         };
         let list = cx.new(|cx| {
-            let mut list = ListState::new(delegate, window, cx);
+            let mut list = ListState::new(delegate, window, cx).searchable(true);
             list.focus(window, cx);
             list
         });

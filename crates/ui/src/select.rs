@@ -41,6 +41,7 @@ pub trait SelectItem: Clone {
     fn display_title(&self) -> Option<AnyElement> {
         None
     }
+    /// Get the value of the item.
     fn value(&self) -> &Self::Value;
     /// Check if the item matches the query for search, default is to match the title.
     fn matches(&self, query: &str) -> bool {
@@ -292,6 +293,7 @@ where
     }
 }
 
+/// Events emitted by the [`SelectState`].
 pub enum SelectEvent<D: SelectDelegate + 'static> {
     Confirm(Option<<D::Item as SelectItem>::Value>),
 }
@@ -303,7 +305,6 @@ struct SelectOptions {
     cleanable: bool,
     placeholder: Option<SharedString>,
     title_prefix: Option<SharedString>,
-    searchable: bool,
     search_placeholder: Option<SharedString>,
     empty: Option<AnyElement>,
     menu_width: Length,
@@ -317,14 +318,13 @@ impl Default for SelectOptions {
             style: StyleRefinement::default(),
             size: Size::default(),
             icon: None,
-            cleanable: true,
+            cleanable: false,
             placeholder: None,
             title_prefix: None,
             empty: None,
             menu_width: Length::Auto,
             disabled: false,
             appearance: true,
-            searchable: true,
             search_placeholder: None,
         }
     }
@@ -334,6 +334,7 @@ impl Default for SelectOptions {
 pub struct SelectState<D: SelectDelegate + 'static> {
     focus_handle: FocusHandle,
     options: SelectOptions,
+    searchable: bool,
     list: Entity<ListState<SelectListDelegate<D>>>,
     empty: Option<Box<dyn Fn(&Window, &App) -> AnyElement>>,
     /// Store the bounds of the input
@@ -352,6 +353,7 @@ pub struct Select<D: SelectDelegate + 'static> {
     options: SelectOptions,
 }
 
+/// A built-in searchable vector for select items.
 #[derive(Debug, Clone)]
 pub struct SearchableVec<T> {
     items: Vec<T>,
@@ -499,30 +501,11 @@ pub struct SelectGroup<I: SelectItem> {
     pub items: Vec<I>,
 }
 
-// impl<I> SelectItem for SelectGroup<I>
-// where
-//     I: SelectItem,
-// {
-//     type Value = SharedString;
-
-//     fn title(&self) -> SharedString {
-//         self.title.clone()
-//     }
-
-//     fn value(&self) -> &Self::Value {
-//         &self.title
-//     }
-
-//     fn matches(&self, query: &str) -> bool {
-//         self.title.to_lowercase().contains(&query.to_lowercase())
-//             || self.items.iter().any(|item| item.matches(query))
-//     }
-// }
-
 impl<I> SelectGroup<I>
 where
     I: SelectItem,
 {
+    /// Create a new SelectGroup with the given title.
     pub fn new(title: impl Into<SharedString>) -> Self {
         Self {
             title: title.into(),
@@ -530,8 +513,15 @@ where
         }
     }
 
+    /// Add an item to the group.
+    pub fn item(mut self, item: I) -> Self {
+        self.items.push(item);
+        self
+    }
+
+    /// Add multiple items to the group.
     pub fn items(mut self, items: impl IntoIterator<Item = I>) -> Self {
-        self.items = items.into_iter().collect();
+        self.items.extend(items);
         self
     }
 
@@ -545,6 +535,7 @@ impl<D> SelectState<D>
 where
     D: SelectDelegate + 'static,
 {
+    /// Create a new Select state.
     pub fn new(
         delegate: D,
         selected_index: Option<IndexPath>,
@@ -559,15 +550,19 @@ where
         };
 
         let list = cx.new(|cx| ListState::new(delegate, window, cx).reset_on_cancel(false));
+        let list_focus_handle = list.read(cx).focus_handle.clone();
+        let list_search_focus_handle = list.read(cx).query_input.focus_handle(cx);
 
         let _subscriptions = vec![
-            cx.on_blur(&list.focus_handle(cx), window, Self::on_blur),
+            cx.on_blur(&list_focus_handle, window, Self::on_blur),
+            cx.on_blur(&list_search_focus_handle, window, Self::on_blur),
             cx.on_blur(&focus_handle, window, Self::on_blur),
         ];
 
         let mut this = Self {
             focus_handle,
             options: SelectOptions::default(),
+            searchable: false,
             list,
             selected_value: None,
             open: false,
@@ -578,6 +573,14 @@ where
         };
         this.set_selected_index(selected_index, window, cx);
         this
+    }
+
+    /// Sets whether the dropdown menu is searchable, default is `false`.
+    ///
+    /// When `true`, there will be a search input at the top of the dropdown menu.
+    pub fn searchable(mut self, searchable: bool) -> Self {
+        self.searchable = searchable;
+        self
     }
 
     /// Set the selected index for the select.
@@ -632,6 +635,7 @@ where
         self.selected_value.as_ref()
     }
 
+    /// Focus the select input.
     pub fn focus(&self, window: &mut Window, _: &mut App) {
         self.focus_handle.focus(window);
     }
@@ -645,7 +649,7 @@ where
 
     fn on_blur(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // When the select and dropdown menu are both not focused, close the dropdown menu.
-        if self.list.focus_handle(cx).is_focused(window) || self.focus_handle.is_focused(window) {
+        if self.list.read(cx).is_focused(window, cx) || self.focus_handle.is_focused(window) {
             return;
         }
 
@@ -769,12 +773,16 @@ where
     D: SelectDelegate + 'static,
 {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let searchable = self.searchable;
         let is_focused = self.focus_handle.is_focused(window);
         let show_clean = self.options.cleanable && self.selected_index(cx).is_some();
         let bounds = self.bounds;
         let allow_open = !(self.open || self.options.disabled);
         let outline_visible = self.open || is_focused && !self.options.disabled;
         let popup_radius = cx.theme().radius.min(px(8.));
+
+        self.list
+            .update(cx, |list, cx| list.set_searchable(searchable, cx));
 
         div()
             .size_full()
@@ -885,7 +893,6 @@ where
                                         .shadow_md()
                                         .child(
                                             List::new(&self.list)
-                                                .searchable(self.options.searchable)
                                                 .when_some(
                                                     self.options.search_placeholder.clone(),
                                                     |this, placeholder| {
@@ -948,17 +955,9 @@ where
         self
     }
 
-    /// Set true to show the clear button when the input field is not empty.
-    pub fn cleanable(mut self) -> Self {
-        self.options.cleanable = true;
-        self
-    }
-
-    /// Sets whether the dropdown menu is searchable, default is `true`.
-    ///
-    /// When `true`, there will be a search input at the top of the dropdown menu.
-    pub fn searchable(mut self, searchable: bool) -> Self {
-        self.options.searchable = searchable;
+    /// Set whether to show the clear button when the input field is not empty, default is false.
+    pub fn cleanable(mut self, cleanable: bool) -> Self {
+        self.options.cleanable = cleanable;
         self
     }
 
