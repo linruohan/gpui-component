@@ -12,7 +12,7 @@ use crate::{
     actions::{Cancel, Confirm},
     animation::cubic_bezier,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme as _, ContextModal, IconName, Root, Sizable as _, StyledExt,
+    h_flex, v_flex, ActiveTheme as _, IconName, Root, Sizable as _, StyledExt, WindowExt as _,
 };
 
 const CONTEXT: &str = "Modal";
@@ -473,10 +473,13 @@ impl RenderOnce for Modal {
                                 )
                             })
                             .children(self.show_close.then(|| {
+                                let top = (paddings.top - px(10.)).max(px(8.));
+                                let right = (paddings.right - px(10.)).max(px(8.));
+
                                 Button::new("close")
                                     .absolute()
-                                    .top(paddings.top - px(3.))
-                                    .right(paddings.right - px(3.))
+                                    .top(top)
+                                    .right(right)
                                     .small()
                                     .ghost()
                                     .icon(IconName::Close)

@@ -10,7 +10,7 @@ use std::{
 use autocorrect::ignorer::Ignorer;
 use gpui::{prelude::FluentBuilder, *};
 use gpui_component::{
-    ActiveTheme, ContextModal, IconName, Sizable,
+    ActiveTheme, IconName, Sizable, WindowExt,
     button::{Button, ButtonVariants as _},
     h_flex,
     highlighter::{Diagnostic, DiagnosticSeverity, Language, LanguageConfig, LanguageRegistry},
@@ -1041,7 +1041,7 @@ fn main() {
 
         story::create_new_window_with_size(
             "Editor",
-            Some(size(px(1200.), px(960.))),
+            Some(size(px(1200.), px(750.))),
             |window, cx| cx.new(|cx| Example::new(window, cx)),
             cx,
         );

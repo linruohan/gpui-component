@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::{
-    h_flex, indicator::Indicator, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
+    h_flex, spinner::Spinner, tooltip::Tooltip, ActiveTheme, Colorize as _, Disableable,
     FocusableExt as _, Icon, Selectable, Sizable, Size, StyleSized, StyledExt,
 };
 use gpui::{
@@ -537,13 +537,6 @@ impl RenderOnce for Button {
                     (on_hover)(hovered, window, cx);
                 })
             })
-            .when(self.disabled, |this| {
-                let disabled_style = style.disabled(self.outline, cx);
-                this.bg(disabled_style.bg)
-                    .text_color(disabled_style.fg)
-                    .border_color(disabled_style.border)
-                    .shadow_none()
-            })
             .child({
                 h_flex()
                     .id("label")
@@ -562,7 +555,7 @@ impl RenderOnce for Button {
                     })
                     .when(self.loading, |this| {
                         this.child(
-                            Indicator::new()
+                            Spinner::new()
                                 .with_size(self.size)
                                 .when_some(self.loading_icon, |this, icon| this.icon(icon)),
                         )
