@@ -819,13 +819,13 @@ impl Calendar {
     fn render_days(&self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let state = self.state.read(cx);
         let weeks = [
-            t!("Calendar.week.0"),
             t!("Calendar.week.1"),
             t!("Calendar.week.2"),
             t!("Calendar.week.3"),
             t!("Calendar.week.4"),
             t!("Calendar.week.5"),
             t!("Calendar.week.6"),
+            t!("Calendar.week.0"),
         ];
 
         h_flex()
