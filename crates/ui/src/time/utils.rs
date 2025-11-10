@@ -95,8 +95,10 @@ pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
         solar::{self, SolarRefHelper},
         util::holiday_util::{self, HolidayUtilRefHelper},
     };
-    let lunar = solar::from_date(date.and_hms_opt(0, 0, 0).unwrap()).get_lunar();
-    let jie_qi = lunar.get_jie_qi();
+    let solar_day = solar::from_date(date.and_hms_opt(0, 0, 0).unwrap());
+    let week = solar_day.get_week();
+    let lunar_day = solar_day.get_lunar();
+    let jie_qi = lunar_day.get_jie_qi();
     let holiday_info = holiday_util::get().get_holiday(
         date.year() as i64,
         Some(date.month() as i64),
@@ -108,15 +110,17 @@ pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
             format!("{} {} {}", date.day(), holiday.get_name(), work_status)
         }
         None => {
-            let day_in_chinese = lunar.get_day_in_chinese();
+            let day_in_chinese = lunar_day.get_day_in_chinese();
+            let day_status = if week == 0 || week == 6 { "休" } else { "" };
             format!(
-                "{} {}",
+                "{} {} {}",
                 date.day(),
                 if jie_qi.is_empty() {
                     day_in_chinese
                 } else {
                     jie_qi
-                }
+                },
+                day_status
             )
         }
     }
