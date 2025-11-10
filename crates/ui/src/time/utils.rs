@@ -42,7 +42,7 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 
     let date = NaiveDate::from_ymd_opt(year, month, 1).unwrap();
     let num_days = date.days_in_month();
-    let start_weekday = date.weekday().num_days_from_sunday();
+    let start_weekday = date.weekday().num_days_from_monday();
 
     // Get the days in the month, 2023-02 will returns
     // "29|30|31| 1| 2| 3| 4",
