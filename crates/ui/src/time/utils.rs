@@ -84,6 +84,7 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 
     days
 }
+#[allow(unused)]
 pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
     // 普通日："15 十五"
     // 节假日："1 元旦 休"

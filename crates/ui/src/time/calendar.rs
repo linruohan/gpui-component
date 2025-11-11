@@ -16,7 +16,7 @@ use crate::{
     StyledExt as _,
 };
 
-use super::utils::{days_in_month, get_holiday_by_lunar_rust};
+use super::utils::{days_in_month, get_holiday_by_tyme4rs};
 
 /// Events emitted by the calendar.
 pub enum CalendarEvent {
@@ -565,7 +565,7 @@ impl Calendar {
         self.item_button(
             date_id,
             // day.to_string(),
-            get_holiday_by_lunar_rust(date),
+            get_holiday_by_tyme4rs(date),
             is_active,
             is_in_range,
             !is_current_month || disabled,
@@ -574,8 +574,7 @@ impl Calendar {
             cx,
         )
         .when(is_today && !is_active, |this| {
-            this.border_1().border_color(green())
-            // this.border_1().bg(cx.theme().blue)
+            this.border_1().border_color(green()).rounded(px(20.0))
         }) // Add border for today
         .when(!disabled, |this| {
             this.on_click(window.listener_for(
@@ -779,9 +778,9 @@ impl Calendar {
                 })
             })
             .when(active, |this| {
-                this.bg(cx.theme().primary)
-                    .text_color(cx.theme().primary_foreground)
-                // this.border_1().border_color(blue()).rounded(px(20.0))
+                // this.bg(cx.theme().primary)
+                //     .text_color(cx.theme().primary_foreground)
+                this.border_1().border_color(blue()).rounded(px(20.0))
             })
             .child(
                 v_flex()
