@@ -96,8 +96,10 @@ pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
         util::holiday_util::{self, HolidayUtilRefHelper},
     };
     let solar_day = solar::from_date(date.and_hms_opt(0, 0, 0).unwrap());
+    let solar_festival = solar_day.clone().get_festivals();
     let week = solar_day.get_week();
     let lunar_day = solar_day.get_lunar();
+    let lunar_festival = lunar_day.get_festivals();
     let jie_qi = lunar_day.get_jie_qi();
     let holiday_info = holiday_util::get().get_holiday(
         date.year() as i64,
@@ -115,10 +117,14 @@ pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
             format!(
                 "{} {} {}",
                 date.day(),
-                if jie_qi.is_empty() {
-                    day_in_chinese
-                } else {
+                if !jie_qi.is_empty() {
                     jie_qi
+                } else if !lunar_festival.is_empty() {
+                    lunar_festival.join(",")
+                } else if !solar_festival.is_empty() {
+                    solar_festival.join(",")
+                } else {
+                    day_in_chinese
                 },
                 day_status
             )
@@ -127,14 +133,16 @@ pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
 }
 pub fn get_holiday_by_tyme4rs(date: NaiveDate) -> String {
     // 使用tyme4rs获取，但是节气信息不准确
-    use tyme4rs::tyme::{holiday::LEGAL_HOLIDAY_NAMES, lunar::LUNAR_DAY_NAMES, solar::SolarDay};
+    use tyme4rs::tyme::{
+        holiday::LEGAL_HOLIDAY_NAMES, lunar::LUNAR_DAY_NAMES, solar::SolarDay, Culture,
+    };
 
     let solar_day = SolarDay::from_ymd(
         date.year() as isize,
         date.month() as usize,
         date.day() as usize,
     );
-
+    let week = solar_day.get_week().get_index();
     if let Some(holiday) = solar_day.get_legal_holiday() {
         format!(
             "{} {} {}",
@@ -144,17 +152,27 @@ pub fn get_holiday_by_tyme4rs(date: NaiveDate) -> String {
         )
     } else {
         let lunar = solar_day.get_lunar_day();
+        // 农历传统节日
+        let lunar_festival = lunar.get_festival();
+        // 阳历现代节日
+        let solar_festival = solar_day.get_festival();
         let lunar_day_name = LUNAR_DAY_NAMES[lunar.get_day() - 1].to_string();
-        let jieqi = solar_day.get_term();
+        let jieqi = solar_day.get_term_day();
+        let jieqi_index = jieqi.get_day_index();
 
         format!(
-            "{} {}",
+            "{} {} {}",
             date.day(),
-            lunar_day_name // if jieqi.is_jie() {
-                           //     lunar_day_name
-                           // } else {
-                           //     jieqi.to_string()
-                           // }
+            if jieqi_index == 0 {
+                jieqi.get_name()
+            } else if let Some(lu_fe) = lunar_festival {
+                lu_fe.get_name()
+            } else if let Some(so_fe) = solar_festival {
+                so_fe.get_name()
+            } else {
+                lunar_day_name
+            },
+            if week == 0 || week == 6 { "休" } else { "" }
         )
     }
 }
