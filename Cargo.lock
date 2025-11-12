@@ -8270,7 +8270,7 @@ dependencies = [
 [[package]]
 name = "tyme4rs"
 version = "1.3.6"
-source = "git+https://github.com/linruohan/tyme4rs.git#800c4b7d046df8c77da9cc8560cbad39253cda81"
+source = "git+https://github.com/linruohan/tyme4rs.git#b8416d86b44102526346b0d5e9480a9f65cff1b9"
 dependencies = [
  "atomic_refcell",
  "lazy_static",
