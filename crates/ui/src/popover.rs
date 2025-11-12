@@ -35,6 +35,7 @@ pub struct Popover {
     trigger_style: Option<StyleRefinement>,
     mouse_button: MouseButton,
     appearance: bool,
+    overlay_closable: bool,
     on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 }
 
@@ -52,6 +53,7 @@ impl Popover {
             children: vec![],
             mouse_button: MouseButton::Left,
             appearance: true,
+            overlay_closable: true,
             default_open: false,
             open: None,
             on_open_change: None,
@@ -121,7 +123,16 @@ impl Popover {
         self
     }
 
-    /// Set the content of the popover.
+    /// Set whether clicking outside the popover will dismiss it, default is `true`.
+    pub fn overlay_closable(mut self, closable: bool) -> Self {
+        self.overlay_closable = closable;
+        self
+    }
+
+    /// Set the content builder for content of the Popover.
+    ///
+    /// This callback will called every time on render the popover.
+    /// So, you should avoid creating new elements or entities in the content closure.
     pub fn content<F, E>(mut self, content: F) -> Self
     where
         E: IntoElement,
@@ -144,7 +155,8 @@ impl Popover {
         self
     }
 
-    /// Bind the focus handle to track focus inside the popover.
+    /// Bind the focus handle to receive focus when the popover is opened.
+    /// If you not set this, a new focus handle will be created for the popover to
     ///
     /// If popover is opened, the focus will be moved to the focus handle.
     pub fn track_focus(mut self, handle: &FocusHandle) -> Self {
@@ -181,7 +193,6 @@ pub struct PopoverState {
     focus_handle: FocusHandle,
     pub(crate) tracked_focus_handle: Option<FocusHandle>,
     trigger_bounds: Option<Bounds<Pixels>>,
-    previous_focus: Option<FocusHandle>,
     open: bool,
     on_open_change: Option<Rc<dyn Fn(&bool, &mut Window, &mut App)>>,
 
@@ -194,7 +205,6 @@ impl PopoverState {
             focus_handle: cx.focus_handle(),
             tracked_focus_handle: None,
             trigger_bounds: None,
-            previous_focus: None,
             open: default_open,
             on_open_change: None,
             _dismiss_subscription: None,
@@ -224,8 +234,13 @@ impl PopoverState {
         self.open = !self.open;
         if self.open {
             let state = cx.entity();
-            self.previous_focus = window.focused(cx);
-            self.focus_handle(cx).focus(window);
+            let focus_handle = if let Some(tracked_focus_handle) = self.tracked_focus_handle.clone()
+            {
+                tracked_focus_handle
+            } else {
+                self.focus_handle.clone()
+            };
+            focus_handle.focus(window);
 
             self._dismiss_subscription =
                 Some(
@@ -237,18 +252,13 @@ impl PopoverState {
                     }),
                 );
         } else {
-            if let Some(previous_focus) = self.previous_focus.take() {
-                window.focus(&previous_focus);
-            }
             self._dismiss_subscription = None;
         }
 
         if let Some(callback) = self.on_open_change.as_ref() {
             callback(&self.open, window, cx);
         }
-
         cx.notify();
-        window.refresh();
     }
 
     fn on_action_cancel(&mut self, _: &Cancel, window: &mut Window, cx: &mut Context<Self>) {
@@ -258,11 +268,7 @@ impl PopoverState {
 
 impl Focusable for PopoverState {
     fn focus_handle(&self, _: &App) -> FocusHandle {
-        if let Some(tracked_focus_handle) = &self.tracked_focus_handle {
-            tracked_focus_handle.clone()
-        } else {
-            self.focus_handle.clone()
-        }
+        self.focus_handle.clone()
     }
 }
 
@@ -310,6 +316,9 @@ impl RenderOnce for Popover {
                 let state = state.clone();
                 move |_, window, cx| {
                     state.update(cx, |state, cx| {
+                        // We force set open to false to toggle it correctly.
+                        // Because if the mouse down out will toggle open first.
+                        state.open = open;
                         state.toggle_open(window, cx);
                     });
                     cx.notify(parent_view_id);
@@ -346,8 +355,8 @@ impl RenderOnce for Popover {
                     .child(
                         v_flex()
                             .id("content")
-                            .key_context(CONTEXT)
                             .track_focus(&focus_handle)
+                            .key_context(CONTEXT)
                             .on_action(window.listener_for(&state, PopoverState::on_action_cancel))
                             .size_full()
                             .occlude()
@@ -363,23 +372,16 @@ impl RenderOnce for Popover {
                                 )
                             })
                             .children(self.children)
-                            .when(self.appearance, |this| {
-                                let state = state.clone();
-                                this.on_mouse_down_out(move |_, window, cx| {
-                                    state.update(cx, |state, cx| {
-                                        state.toggle_open(window, cx);
-                                    });
-                                    cx.notify(parent_view_id);
+                            .when(self.overlay_closable, |this| {
+                                this.on_mouse_down_out({
+                                    let state = state.clone();
+                                    move |_, window, cx| {
+                                        state.update(cx, |state, cx| {
+                                            state.dismiss(window, cx);
+                                        });
+                                        cx.notify(parent_view_id);
+                                    }
                                 })
-                            })
-                            .on_mouse_down_out({
-                                let state = state.clone();
-                                move |_, window, cx| {
-                                    state.update(cx, |state, cx| {
-                                        state.dismiss(window, cx);
-                                    });
-                                    cx.notify(parent_view_id);
-                                }
                             })
                             .refine_style(&self.style),
                     ),
