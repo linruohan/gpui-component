@@ -9,9 +9,10 @@ use gpui_component::{
     input::{Input, InputState},
     scroll::ScrollbarShow,
 };
+use gpui_component_assets::Assets;
+use gpui_component_story::{ButtonStory, IconStory, StoryContainer};
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
-use story::{Assets, ButtonStory, IconStory, StoryContainer};
 
 actions!(tiles_story, [Quit]);
 
@@ -139,7 +140,7 @@ pub fn init(cx: &mut App) {
     cx.on_action(|_action: &Open, _cx: &mut App| {});
 
     gpui_component::init(cx);
-    story::init(cx);
+    gpui_component_story::init(cx);
 }
 
 pub struct StoryTiles {
@@ -379,7 +380,7 @@ impl StoryTiles {
 
             let window = cx.open_window(options, |window, cx| {
                 let tiles_view = cx.new(|cx| Self::new(window, cx));
-                cx.new(|cx| Root::new(tiles_view.into(), window, cx))
+                cx.new(|cx| Root::new(tiles_view, window, cx))
             })?;
 
             window
@@ -409,8 +410,13 @@ pub fn open_new(
 }
 
 impl Render for StoryTiles {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let sheet_layer = Root::render_sheet_layer(window, cx);
+        let dialog_layer = Root::render_dialog_layer(window, cx);
+        let notification_layer = Root::render_notification_layer(window, cx);
+
         div()
+            .font_family(".SystemUIFont")
             .relative()
             .size_full()
             .flex()
@@ -419,6 +425,9 @@ impl Render for StoryTiles {
             .text_color(cx.theme().foreground)
             .child(TitleBar::new().child(div().flex().items_center().child("Story Tiles")))
             .child(self.dock_area.clone())
+            .children(sheet_layer)
+            .children(dialog_layer)
+            .children(notification_layer)
     }
 }
 
@@ -427,7 +436,7 @@ fn main() {
 
     app.run(move |cx| {
         gpui_component::init(cx);
-        story::init(cx);
+        gpui_component_story::init(cx);
         ContainerPanel::init(cx);
 
         cx.on_action(quit);

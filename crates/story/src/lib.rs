@@ -1,7 +1,6 @@
 mod accordion_story;
 mod alert_story;
 mod app_menus;
-mod assets;
 mod avatar_story;
 mod badge_story;
 mod button_story;
@@ -51,7 +50,6 @@ mod virtual_list_story;
 mod webview_story;
 mod welcome_story;
 
-pub use assets::Assets;
 use gpui::{
     Action, AnyElement, AnyView, App, AppContext, Bounds, Context, Div, Entity, EventEmitter,
     Focusable, Global, Hsla, InteractiveElement, IntoElement, KeyBinding, ParentElement, Pixels,
@@ -224,7 +222,7 @@ pub fn create_new_window_with_size<F, E>(
                 let view = crate_view_fn(window, cx);
                 let root = cx.new(|cx| StoryRoot::new(title.clone(), view, window, cx));
 
-                cx.new(|cx| Root::new(root.into(), window, cx).text_base())
+                cx.new(|cx| Root::new(root, window, cx))
             })
             .expect("failed to open window");
 
@@ -261,13 +259,22 @@ impl StoryRoot {
 }
 
 impl Render for StoryRoot {
-    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div().size_full().child(
-            v_flex()
-                .size_full()
-                .child(self.title_bar.clone())
-                .child(div().flex_1().overflow_hidden().child(self.view.clone())),
-        )
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let sheet_layer = Root::render_sheet_layer(window, cx);
+        let dialog_layer = Root::render_dialog_layer(window, cx);
+        let notification_layer = Root::render_notification_layer(window, cx);
+
+        div()
+            .size_full()
+            .child(
+                v_flex()
+                    .size_full()
+                    .child(self.title_bar.clone())
+                    .child(div().flex_1().overflow_hidden().child(self.view.clone())),
+            )
+            .children(sheet_layer)
+            .children(dialog_layer)
+            .children(notification_layer)
     }
 }
 

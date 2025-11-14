@@ -24,9 +24,9 @@ Button::new("ok")
 
 Add the following to your `Cargo.toml`:
 
-```toml
-gpui = "0.2"
-gpui-component = "0.4.0-preview2"
+```toml-vue
+gpui = "{{ GPUI_VERSION }}"
+gpui-component = "{{ VERSION }}"
 ```
 
 :::warning
@@ -73,7 +73,7 @@ fn main() {
             cx.open_window(WindowOptions::default(), |window, cx| {
                 let view = cx.new(|_| HelloWorld);
                 // This first level on the window, should be a Root.
-                cx.new(|cx| Root::new(view.into(), window, cx))
+                cx.new(|cx| Root::new(view, window, cx))
             })?;
 
             Ok::<_, anyhow::Error>(())
