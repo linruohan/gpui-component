@@ -610,7 +610,7 @@ impl Icon {
         icon.into()
     }
 
-    fn build(name: impl IconNamed) -> Self {
+    pub fn build(name: impl IconNamed) -> Self {
         Self::default().path(name.path())
     }
 
