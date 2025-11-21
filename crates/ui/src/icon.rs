@@ -197,7 +197,7 @@ pub enum IconName {
     ViewSortDescendingRtlSymbolic,
     WorkWeekSymbolic,
     DownSmallSymbolic,
-    MapMarkSymbolic,
+    MapMarkerSymbolic,
     PeopleSymbolic,
     VideoCameraSymbolic,
 }
@@ -570,7 +570,7 @@ impl IconNamed for IconName {
             }
             Self::WorkWeekSymbolic => "planify-icons/work-week-symbolic.svg",
             Self::DownSmallSymbolic => "planify-icons/down-small-symbolic.svg",
-            Self::MapMarkSymbolic => "planify-icons/map-mark-symbolic.svg",
+            Self::MapMarkerSymbolic => "planify-icons/map-mark-symbolic.svg",
             Self::PeopleSymbolic => "planify-icons/people-symbolic.svg",
             Self::VideoCameraSymbolic => "planify-icons/video-camera-symbolic.svg",
         }
