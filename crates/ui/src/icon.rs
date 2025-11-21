@@ -196,6 +196,10 @@ pub enum IconName {
     ViewSortAscendingRtlSymbolic,
     ViewSortDescendingRtlSymbolic,
     WorkWeekSymbolic,
+    DownSmallSymbolic,
+    MapMarkSymbolic,
+    PeopleSymbolic,
+    VideoCameraSymbolic,
 }
 
 impl IconName {
@@ -366,10 +370,13 @@ impl IconName {
             "view-sort-ascending-rtl-symbolic" => Self::ViewSortAscendingRtlSymbolic,
             "view-sort-descending-rtl-symbolic" => Self::ViewSortDescendingRtlSymbolic,
             "work-week-symbolic" => Self::WorkWeekSymbolic,
+            "down-small-symbolic" => Self::DownSmallSymbolic,
+            "map-marker-symbolic" => Self::MapMarkerSymbolic,
+            "people-symbolic" => Self::PeopleSymbolic,
+            "video-camera-symbolic" => Self::VideoCameraSymbolic,
             _ => Self::from_str("todoist-symbolic"), // Default to Todoist icon if not found
         }
     }
-
 }
 
 impl IconNamed for IconName {
@@ -562,6 +569,10 @@ impl IconNamed for IconName {
                 "planify-icons/view-sort-descending-rtl-symbolic.svg"
             }
             Self::WorkWeekSymbolic => "planify-icons/work-week-symbolic.svg",
+            Self::DownSmallSymbolic => "planify-icons/down-small-symbolic.svg",
+            Self::MapMarkSymbolic => "planify-icons/map-mark-symbolic.svg",
+            Self::PeopleSymbolic => "planify-icons/people-symbolic.svg",
+            Self::VideoCameraSymbolic => "planify-icons/video-camera-symbolic.svg",
         }
         .into()
     }
