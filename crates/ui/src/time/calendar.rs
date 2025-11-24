@@ -1,20 +1,11 @@
 use std::{borrow::Cow, rc::Rc};
 
 use chrono::{Datelike, Local, NaiveDate};
-use gpui::{
-    blue, div, green, prelude::FluentBuilder as _, px, relative, App, ClickEvent, Context,
-    ElementId, Empty, Entity, EventEmitter, FocusHandle, InteractiveElement, IntoElement,
-    ParentElement, Render, RenderOnce, SharedString, StatefulInteractiveElement, StyleRefinement,
-    Styled, Window,
-};
+use gpui::{blue, div, prelude::FluentBuilder as _, px, relative, App, ClickEvent, Context, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle, InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window};
 use rust_i18n::t;
 
-use crate::{
-    blue_500,
-    button::{Button, ButtonVariants as _},
-    h_flex, v_flex, ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size,
-    StyledExt as _,
-};
+use crate::{blue_500, button::{Button, ButtonVariants as _}, h_flex, v_flex,
+            ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size, StyledExt as _, StyledExt as _};
 
 use super::utils::{days_in_month, get_holiday_by_tyme4rs};
 
@@ -545,7 +536,7 @@ impl Calendar {
         offset_month: usize,
         window: &mut Window,
         cx: &mut App,
-    ) -> impl IntoElement {
+    ) -> Stateful<Div> {
         let state = self.state.read(cx);
         let (_, month) = state.offset_year_month(offset_month);
         let _day = d.day();
@@ -563,7 +554,7 @@ impl Calendar {
         let date_id: SharedString = format!("{}_{}", date.format("%Y-%m-%d"), offset_month).into();
 
         self.item_button(
-            date_id,
+            date_id.clone(),
             // day.to_string(),
             get_holiday_by_tyme4rs(date),
             is_active,
@@ -574,8 +565,7 @@ impl Calendar {
             cx,
         )
         .when(is_today && !is_active, |this| {
-            // this.border_1().border_color(cx.theme().border)
-            this.border_1().border_color(green()).rounded(px(20.0))
+            this.border_1().border_color(cx.theme().border)
         }) // Add border for today
         .when(!disabled, |this| {
             this.on_click(window.listener_for(
@@ -738,7 +728,7 @@ impl Calendar {
         disabled: bool,
         _: &mut Window,
         cx: &mut App,
-    ) -> impl IntoElement + Styled + StatefulInteractiveElement {
+    ) -> Stateful<Div> {
         let label_str = label.into().to_string().trim().to_string();
         let holiday_parts: Vec<&str> = label_str.split(' ').collect();
         let day = holiday_parts[0].to_string();
@@ -781,7 +771,6 @@ impl Calendar {
             .when(active, |this| {
                 this.bg(cx.theme().primary)
                     .text_color(cx.theme().primary_foreground)
-                //this.border_1().border_color(blue()).rounded(px(20.0))
             })
             .child(
                 v_flex()
@@ -861,12 +850,7 @@ impl Calendar {
             )
     }
 
-    fn render_week(
-        &self,
-        week: impl Into<SharedString>,
-        _: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
+    fn render_week(&self, week: impl Into<SharedString>, _: &mut Window, cx: &mut App) -> Div {
         h_flex()
             .map(|this| match self.size {
                 Size::Small => this.size_7().rounded(cx.theme().radius / 2.0),
