@@ -1,11 +1,20 @@
 use std::{borrow::Cow, rc::Rc};
 
 use chrono::{Datelike, Local, NaiveDate};
-use gpui::{blue, div, prelude::FluentBuilder as _, px, relative, App, ClickEvent, Context, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle, InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Stateful, StatefulInteractiveElement, StyleRefinement, Styled, Window};
+use gpui::{
+    App, ClickEvent, Context, Div, ElementId, Empty, Entity, EventEmitter, FocusHandle,
+    InteractiveElement, IntoElement, ParentElement, Render, RenderOnce, SharedString, Stateful,
+    StatefulInteractiveElement, StyleRefinement, Styled, Window, blue, div,
+    prelude::FluentBuilder as _, px, relative,
+};
 use rust_i18n::t;
 
-use crate::{blue_500, button::{Button, ButtonVariants as _}, h_flex, v_flex,
-            ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size, StyledExt as _, StyledExt as _};
+use crate::{
+    ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size, StyledExt as _,
+    StyledExt as _, blue_500,
+    button::{Button, ButtonVariants as _},
+    h_flex, v_flex,
+};
 
 use super::utils::{days_in_month, get_holiday_by_tyme4rs};
 
@@ -565,7 +574,7 @@ impl Calendar {
             cx,
         )
         .when(is_today && !is_active, |this| {
-            this.border_1().border_color(cx.theme().border)
+            this.border_1().border_color(cx.theme().blue)
         }) // Add border for today
         .when(!disabled, |this| {
             this.on_click(window.listener_for(
