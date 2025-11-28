@@ -1,7 +1,7 @@
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::actions::{SelectLeft, SelectRight};
 use crate::menu::menu_item::MenuItemElement;
-use crate::scroll::{Scrollbar, ScrollbarState};
+use crate::scroll::ScrollableElement;
 use crate::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, v_flex};
 use crate::{Side, Size, StyledExt, kbd::Kbd};
 use gpui::{
@@ -287,7 +287,6 @@ pub struct PopupMenu {
     scrollable: bool,
     external_link_icon: bool,
     scroll_handle: ScrollHandle,
-    scroll_state: ScrollbarState,
     // This will update on render
     submenu_anchor: (Corner, Pixels),
 
@@ -309,7 +308,6 @@ impl PopupMenu {
             bounds: Bounds::default(),
             scrollable: false,
             scroll_handle: ScrollHandle::default(),
-            scroll_state: ScrollbarState::default(),
             external_link_icon: true,
             size: Size::default(),
             submenu_anchor: (Corner::TopLeft, Pixels::ZERO),
@@ -1311,15 +1309,7 @@ impl Render for PopupMenu {
             )
             .when(self.scrollable, |this| {
                 // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu will cannot be displayed.
-                this.child(
-                    div()
-                        .absolute()
-                        .top_0()
-                        .left_0()
-                        .right_0()
-                        .bottom_0()
-                        .child(Scrollbar::vertical(&self.scroll_state, &self.scroll_handle)),
-                )
+                this.vertical_scrollbar(&self.scroll_handle)
             })
     }
 }
