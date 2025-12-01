@@ -187,7 +187,9 @@ struct StockTableDelegate {
     columns: Vec<Column>,
     size: Size,
     loading: bool,
+    lazy_load: bool,
     full_loading: bool,
+    clicked_row: Option<usize>,
     eof: bool,
     visible_rows: Range<usize>,
     visible_cols: Range<usize>,
@@ -200,6 +202,8 @@ impl StockTableDelegate {
         Self {
             size: Size::default(),
             stocks: random_stocks(size),
+            lazy_load: false,
+            clicked_row: None,
             columns: vec![
                 Column::new("id", "ID")
                     .width(60.)
@@ -352,7 +356,12 @@ impl TableDelegate for StockTableDelegate {
         &self.columns[col_ix]
     }
 
-    fn render_th(&self, col_ix: usize, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render_th(
+        &mut self,
+        col_ix: usize,
+        _: &mut Window,
+        _: &mut Context<TableState<Self>>,
+    ) -> impl IntoElement {
         let col = self.columns.get(col_ix).unwrap();
 
         div()
@@ -366,11 +375,11 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn context_menu(
-        &self,
+        &mut self,
         row_ix: usize,
         menu: PopupMenu,
         _window: &mut Window,
-        _cx: &mut App,
+        _: &mut Context<TableState<Self>>,
     ) -> PopupMenu {
         menu.menu(
             format!("Selected Row: {}", row_ix),
@@ -383,13 +392,23 @@ impl TableDelegate for StockTableDelegate {
         .menu("Size XSmall", Box::new(ChangeSize(Size::XSmall)))
     }
 
-    fn render_tr(&self, row_ix: usize, _: &mut Window, _: &mut App) -> Stateful<Div> {
-        div().id(row_ix).on_click(|ev: &ClickEvent, _, _| {
-            println!(
-                "You have clicked row with secondary: {}",
-                ev.modifiers().secondary()
-            )
-        })
+    fn render_tr(
+        &mut self,
+        row_ix: usize,
+        _: &mut Window,
+        cx: &mut Context<TableState<Self>>,
+    ) -> Stateful<Div> {
+        div()
+            .id(row_ix)
+            .on_click(cx.listener(move |table, ev: &ClickEvent, _window, cx| {
+                println!(
+                    "You have clicked row with secondary: {}",
+                    ev.modifiers().secondary()
+                );
+
+                table.delegate_mut().clicked_row = Some(row_ix);
+                cx.notify();
+            }))
     }
 
     /// NOTE: Performance metrics
@@ -401,11 +420,11 @@ impl TableDelegate for StockTableDelegate {
     ///
     /// If we improve the td rendering, we can reduce the time to render the full table cells.
     fn render_td(
-        &self,
+        &mut self,
         row_ix: usize,
         col_ix: usize,
         _: &mut Window,
-        cx: &mut App,
+        cx: &mut Context<TableState<Self>>,
     ) -> impl IntoElement {
         let stock = self.stocks.get(row_ix).unwrap();
         let col = self.columns.get(col_ix).unwrap();
@@ -543,6 +562,10 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn is_eof(&self, _: &App) -> bool {
+        if !self.lazy_load {
+            return true;
+        }
+
         return !self.loading && !self.eof;
     }
 
@@ -551,6 +574,10 @@ impl TableDelegate for StockTableDelegate {
     }
 
     fn load_more(&mut self, _: &mut Window, cx: &mut Context<TableState<Self>>) {
+        if !self.lazy_load {
+            return;
+        }
+
         self.loading = true;
 
         self._load_task = cx.spawn(async move |view, cx| {
@@ -959,7 +986,18 @@ impl Render for TableStory {
                                     this.child(
                                         h_flex().gap_1().child(Spinner::new()).child("Loading..."),
                                     )
-                                }),
+                                })
+                                .child(
+                                    Checkbox::new("lazy-load")
+                                        .label("Lazy Load")
+                                        .checked(delegate.lazy_load)
+                                        .on_click(cx.listener(|this, check: &bool, _, cx| {
+                                            this.table.update(cx, |table, cx| {
+                                                table.delegate_mut().lazy_load = *check;
+                                                cx.notify();
+                                            })
+                                        })),
+                                ),
                         )
                         .child(
                             h_flex()

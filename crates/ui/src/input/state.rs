@@ -368,11 +368,7 @@ impl InputState {
         Self {
             focus_handle: focus_handle.clone(),
             text: "".into(),
-            text_wrapper: TextWrapper::new(
-                text_style.font(),
-                text_style.font_size.to_pixels(window.rem_size()),
-                None,
-            ),
+            text_wrapper: TextWrapper::new(text_style.font(), window.rem_size(), None),
             blink_cursor,
             history,
             selected_range: Selection::default(),
@@ -1232,6 +1228,9 @@ impl InputState {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) {
+        if self.selected_range.is_empty() {
+            self.selection_reversed = false;
+        }
         self.selecting = false;
         self.selected_word_range = None;
     }
