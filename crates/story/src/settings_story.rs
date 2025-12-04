@@ -22,6 +22,7 @@ struct AppSettings {
     cli_path: SharedString,
     font_family: SharedString,
     font_size: f64,
+    line_height: f64,
     notifications_enabled: bool,
     auto_update: bool,
     resettable: bool,
@@ -34,6 +35,7 @@ impl Default for AppSettings {
             cli_path: "/usr/local/bin/bash".into(),
             font_family: "Arial".into(),
             font_size: 14.0,
+            line_height: 12.0,
             notifications_enabled: true,
             auto_update: true,
             resettable: true,
@@ -264,7 +266,29 @@ impl SettingsStory {
                                 )
                                 .default_value(default_settings.font_size),
                             )
-                            .description("Adjust the font size for better readability."),
+                            .description(
+                                "Adjust the font size for better readability between 8 and 72.",
+                            ),
+                        )
+                        .item(
+                            SettingItem::new(
+                                "Line Height",
+                                SettingField::number_input(
+                                    NumberFieldOptions {
+                                        min: 8.0,
+                                        max: 32.0,
+                                        ..Default::default()
+                                    },
+                                    |cx: &App| AppSettings::global(cx).line_height,
+                                    |val: f64, cx: &mut App| {
+                                        AppSettings::global_mut(cx).line_height = val;
+                                    },
+                                )
+                                .default_value(default_settings.line_height),
+                            )
+                            .description(
+                                "Adjust the line height for better readability between 8 and 32.",
+                            ),
                         ),
                     SettingGroup::new().title("Other").items(vec![
                         SettingItem::render(|options, _, _| {
