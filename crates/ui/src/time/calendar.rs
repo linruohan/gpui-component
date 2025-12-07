@@ -10,8 +10,7 @@ use gpui::{
 use rust_i18n::t;
 
 use crate::{
-    ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size, StyledExt as _,
-    StyledExt as _, blue_500,
+    ActiveTheme, Disableable as _, IconName, Selectable, Sizable, Size, StyledExt as _, blue_500,
     button::{Button, ButtonVariants as _},
     h_flex, v_flex,
 };
