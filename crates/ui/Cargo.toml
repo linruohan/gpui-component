@@ -7,7 +7,7 @@ documentation = "https://docs.rs/gpui-component"
 homepage = "https://longbridge.github.io/gpui-component"
 repository = "https://github.com/longbridge/gpui-component"
 readme = "../../README.md"
-version = "0.5.0-preview2"
+version = "0.5.0"
 publish = true
 edition.workspace = true
 
@@ -16,8 +16,7 @@ doctest = false
 
 [features]
 decimal = ["dep:rust_decimal"]
-inspector = ["gpui-macros/inspector", "gpui/inspector", "wry/devtools"]
-webview = ["dep:wry"]
+inspector = ["gpui-macros/inspector", "gpui/inspector"]
 
 # For syntax highlighting in Markdown and CodeEditor.
 tree-sitter-languages = [

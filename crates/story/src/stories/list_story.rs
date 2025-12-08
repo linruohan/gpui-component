@@ -288,8 +288,12 @@ impl ListDelegate for CompanyListDelegate {
         self.loading
     }
 
-    fn is_eof(&self, _: &App) -> bool {
-        return !self.loading && !self.eof;
+    fn has_more(&self, _: &App) -> bool {
+        if self.loading {
+            return false;
+        }
+
+        return !self.eof;
     }
 
     fn load_more_threshold(&self) -> usize {

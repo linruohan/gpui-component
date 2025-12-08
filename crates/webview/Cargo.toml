@@ -1,11 +1,11 @@
 [package]
-name = "gpui-component-assets"
-description = "Default bundled assets for GPUI Component."
-keywords = ["desktop", "gpui", "shadcn", "ui", "uikit"]
+name = "gpui-wry"
+description = "WebView support for GPUI, based on Wry."
+keywords = ["webview", "gpui","wry"]
 license = "Apache-2.0"
 documentation = "https://docs.rs/gpui-component"
 homepage = "https://longbridge.github.io/gpui-component"
-repository = "https://github.com/longbridge/gpui-component"
+repository = "https://github.com/longbridge/gpui-component/tree/main/crates/webview"
 readme = "README.md"
 edition.workspace = true
 publish = true
@@ -17,4 +17,4 @@ doctest = false
 [dependencies]
 anyhow.workspace = true
 gpui.workspace = true
-rust-embed = { version = "8.7.2", features = ["interpolate-folder-path"] }
+wry = { version = "0.53.3" }
