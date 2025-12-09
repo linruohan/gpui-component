@@ -1213,7 +1213,7 @@ dependencies = [
 [[package]]
 name = "collections"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "indexmap",
  "rustc-hash 2.1.1",
@@ -1701,7 +1701,7 @@ dependencies = [
 [[package]]
 name = "derive_refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2855,7 +2855,7 @@ dependencies = [
 [[package]]
 name = "gpui"
 version = "0.2.2"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "anyhow",
  "as-raw-xcb-connection",
@@ -3058,6 +3058,7 @@ dependencies = [
  "rand 0.8.5",
  "regex",
  "reqwest_client",
+ "rust-i18n",
  "serde",
  "serde_json",
  "smol",
@@ -3085,13 +3086,13 @@ version = "0.5.0"
 dependencies = [
  "anyhow",
  "gpui",
- "wry",
+ "lb-wry",
 ]
 
 [[package]]
 name = "gpui_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -3357,7 +3358,7 @@ dependencies = [
 [[package]]
 name = "http_client"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -3971,7 +3972,7 @@ dependencies = [
  "sha2",
  "soup3",
  "tao-macros",
- "thiserror 2.0.17",
+ "thiserror 2.0.14",
  "url",
  "webkit2gtk",
  "webkit2gtk-sys",
@@ -4333,7 +4334,7 @@ dependencies = [
 [[package]]
 name = "media"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -5127,7 +5128,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "perf"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "collections",
  "serde",
@@ -6002,7 +6003,7 @@ dependencies = [
 [[package]]
 name = "refineable"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "derive_refineable",
 ]
@@ -7070,7 +7071,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "sum_tree"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "arrayvec",
  "log",
@@ -8389,7 +8390,7 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 [[package]]
 name = "util"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "anyhow",
  "async-fs",
@@ -8428,7 +8429,7 @@ dependencies = [
 [[package]]
 name = "util_macros"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "perf",
  "quote",
@@ -8857,8 +8858,8 @@ dependencies = [
  "gpui-component",
  "gpui-wry",
  "gtk",
+ "lb-wry",
  "raw-window-handle",
- "wry",
 ]
 
 [[package]]
@@ -9569,51 +9570,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
 
 [[package]]
-name = "wry"
-version = "0.53.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "728b7d4c8ec8d81cab295e0b5b8a4c263c0d41a785fb8f8c4df284e5411140a2"
-dependencies = [
- "base64",
- "block2",
- "cookie",
- "crossbeam-channel",
- "dirs 6.0.0",
- "dpi",
- "dunce",
- "gdkx11",
- "gtk",
- "html5ever 0.29.1",
- "http",
- "javascriptcore-rs",
- "jni",
- "kuchikiki",
- "libc",
- "ndk",
- "objc2",
- "objc2-app-kit",
- "objc2-core-foundation",
- "objc2-foundation",
- "objc2-ui-kit",
- "objc2-web-kit",
- "once_cell",
- "percent-encoding",
- "raw-window-handle",
- "sha2",
- "soup3",
- "tao-macros",
- "thiserror 2.0.17",
- "url",
- "webkit2gtk",
- "webkit2gtk-sys",
- "webview2-com",
- "windows 0.61.3",
- "windows-core 0.61.2",
- "windows-version",
- "x11-dl",
-]
-
-[[package]]
 name = "wyz"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10080,7 +10036,7 @@ dependencies = [
 [[package]]
 name = "ztracing"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 dependencies = [
  "tracing",
  "tracing-subscriber",
@@ -10090,7 +10046,7 @@ dependencies = [
 [[package]]
 name = "ztracing_macro"
 version = "0.1.0"
-source = "git+https://github.com/zed-industries/zed#e75a7aecd6ebd2c381d9dfb606be20cc4326200b"
+source = "git+https://github.com/zed-industries/zed#45829b33805a45f6edc9d13fcd3806933b9a91e8"
 
 [[package]]
 name = "zune-core"
