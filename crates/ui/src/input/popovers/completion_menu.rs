@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use gpui::{
-    Action, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Empty, Entity,
-    EventEmitter, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    Point, Render, RenderOnce, SharedString, Styled, StyledText, Subscription, Window, canvas,
-    deferred, div, prelude::FluentBuilder, px, relative,
+    Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
+    HighlightStyle, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
+    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, deferred, div,
+    prelude::FluentBuilder, px, relative,
 };
 use lsp_types::{CompletionItem, CompletionTextEdit};
 
@@ -172,7 +172,6 @@ pub struct CompletionMenu {
     editor: Entity<InputState>,
     list: Entity<ListState<ContextMenuDelegate>>,
     open: bool,
-    bounds: Bounds<Pixels>,
 
     /// The offset of the first character that triggered the completion.
     pub(crate) trigger_start_offset: Option<usize>,
@@ -220,7 +219,6 @@ impl CompletionMenu {
                 open: false,
                 trigger_start_offset: None,
                 query: SharedString::default(),
-                bounds: Bounds::default(),
                 _subscriptions,
             }
         })
@@ -398,8 +396,6 @@ impl Render for CompletionMenu {
             return Empty.into_any_element();
         }
 
-        let view = cx.entity();
-
         let Some(pos) = self.origin(cx) else {
             return Empty.into_any_element();
         };
@@ -431,15 +427,7 @@ impl Render for CompletionMenu {
                     editor_popover("completion-menu", cx)
                         .max_w(max_width)
                         .min_w(px(120.))
-                        .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT))
-                        .child(
-                            canvas(
-                                move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
-                                |_, _, _, _| {},
-                            )
-                            .absolute()
-                            .size_full(),
-                        ),
+                        .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT)),
                 )
                 .when_some(selected_documentation, |this, documentation| {
                     let mut doc = match documentation {

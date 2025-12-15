@@ -1,10 +1,10 @@
 use std::rc::Rc;
 
 use gpui::{
-    Action, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Empty, Entity,
-    EventEmitter, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
-    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, canvas, deferred, div,
-    prelude::FluentBuilder, px, relative,
+    Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
+    InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render, RenderOnce,
+    SharedString, Styled, StyledText, Subscription, Window, deferred, div, prelude::FluentBuilder,
+    px, relative,
 };
 use lsp_types::CodeAction;
 
@@ -146,7 +146,6 @@ pub struct CodeActionMenu {
     state: Entity<InputState>,
     list: Entity<ListState<MenuDelegate>>,
     open: bool,
-    bounds: Bounds<Pixels>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -188,7 +187,6 @@ impl CodeActionMenu {
                 state,
                 list,
                 open: false,
-                bounds: Bounds::default(),
                 _subscriptions,
             }
         })
@@ -316,8 +314,6 @@ impl Render for CodeActionMenu {
             return Empty.into_any_element();
         }
 
-        let view = cx.entity();
-
         let Some(pos) = self.origin(cx) else {
             return Empty.into_any_element();
         };
@@ -332,14 +328,6 @@ impl Render for CodeActionMenu {
                 .max_w(max_width)
                 .min_w(px(120.))
                 .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT))
-                .child(
-                    canvas(
-                        move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
-                        |_, _, _, _| {},
-                    )
-                    .absolute()
-                    .size_full(),
-                )
                 .on_mouse_down_out(cx.listener(|this, _, _, cx| {
                     this.hide(cx);
                 })),
