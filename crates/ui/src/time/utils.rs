@@ -84,56 +84,8 @@ pub(crate) fn days_in_month(year: i32, month: u32) -> Vec<Vec<NaiveDate>> {
 
     days
 }
-#[allow(unused)]
-pub fn get_holiday_by_lunar_rust(date: NaiveDate) -> String {
-    // 普通日："15 十五"
-    // 节假日："1 元旦 休"
-    // 调班日："4 清明节 班"
-    use chrono::Datelike;
-    use lunar_rust::{
-        holiday::HolidayRefHelper,
-        lunar::LunarRefHelper,
-        solar::{self, SolarRefHelper},
-        util::holiday_util::{self, HolidayUtilRefHelper},
-    };
-    let solar_day = solar::from_date(date.and_hms_opt(0, 0, 0).unwrap());
-    let solar_festival = solar_day.clone().get_festivals();
-    let week = solar_day.get_week();
-    let lunar_day = solar_day.get_lunar();
-    let lunar_festival = lunar_day.get_festivals();
-    let jie_qi = lunar_day.get_jie_qi();
-    let holiday_info = holiday_util::get().get_holiday(
-        date.year() as i64,
-        Some(date.month() as i64),
-        Some(date.day() as i64),
-    );
-    match holiday_info {
-        Some(holiday) => {
-            let work_status = if holiday.is_work() { "班" } else { "休" };
-            format!("{} {} {}", date.day(), holiday.get_name(), work_status)
-        }
-        None => {
-            let day_in_chinese = lunar_day.get_day_in_chinese();
-            let day_status = if week == 0 || week == 6 { "休" } else { "" };
-            format!(
-                "{} {} {}",
-                date.day(),
-                if !jie_qi.is_empty() {
-                    jie_qi
-                } else if !lunar_festival.is_empty() {
-                    lunar_festival.join(",")
-                } else if !solar_festival.is_empty() {
-                    solar_festival.join(",")
-                } else {
-                    day_in_chinese
-                },
-                day_status
-            )
-        }
-    }
-}
+
 pub fn get_holiday_by_tyme4rs(date: NaiveDate) -> String {
-    // 使用tyme4rs获取，但是节气信息不准确
     use tyme4rs::tyme::{
         holiday::LEGAL_HOLIDAY_NAMES, lunar::LUNAR_DAY_NAMES, solar::SolarDay, Culture,
     };
