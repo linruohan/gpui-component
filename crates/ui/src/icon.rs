@@ -142,6 +142,7 @@ pub enum IconName {
     CrossLargeCircleFilledSymbolic,
     CrossLargeCircleOutlineSymbolic,
     DelaySymbolic,
+    DelayLongSmallSymbolic,
     DialogInformationSymbolic,
     DockLeftSymbolic,
     DockRightSymbolic,
@@ -316,6 +317,7 @@ impl IconName {
             "cross-large-circle-filled-symbolic" => Self::CrossLargeCircleFilledSymbolic,
             "cross-large-circle-outline-symbolic" => Self::CrossLargeCircleOutlineSymbolic,
             "delay-symbolic" => Self::DelaySymbolic,
+            "delay-long-small-symbolic" => Self::DelayLongSmallSymbolic,
             "dialog-information-symbolic" => Self::DialogInformationSymbolic,
             "dock-left-symbolic" => Self::DockLeftSymbolic,
             "dock-right-symbolic" => Self::DockRightSymbolic,
@@ -519,6 +521,7 @@ impl IconNamed for IconName {
                 "planify-icons/cross-large-circle-outline-symbolic.svg"
             }
             Self::DelaySymbolic => "planify-icons/delay-symbolic.svg",
+            Self::DelayLongSmallSymbolic => "planify-icons/delay-long-small-symbolic.svg",
             Self::DialogInformationSymbolic => "planify-icons/dialog-information-symbolic.svg",
             Self::DockLeftSymbolic => "planify-icons/dock-left-symbolic.svg",
             Self::DockRightSymbolic => "planify-icons/dock-right-symbolic.svg",
