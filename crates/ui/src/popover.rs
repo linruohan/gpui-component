@@ -329,6 +329,7 @@ impl Popover {
                 ))
                 .child(div().relative().child(content)),
         )
+        .with_priority(1)
     }
 
     pub(crate) fn render_popover_content(
@@ -421,9 +422,14 @@ impl RenderOnce for Popover {
                 .on_prepaint({
                     let state = state.clone();
                     move |bounds, _, cx| {
-                        state.update(cx, |state, _| {
+                        let bounds_changed = state.update(cx, |state, _| {
+                            let changed = state.content_bounds != bounds;
                             state.content_bounds = bounds;
-                        })
+                            changed
+                        });
+                        if bounds_changed {
+                            cx.notify(parent_view_id);
+                        }
                     }
                 })
                 .when(self.overlay_closable, |this| {
