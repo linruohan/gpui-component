@@ -1,8 +1,8 @@
 use crate::{ActiveTheme, Sizable, Size};
 use gpui::{
-    prelude::FluentBuilder as _, svg, AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians,
-    Render, RenderOnce, SharedString, StyleRefinement, Styled, Svg,
-    Transformation, Window,
+    AnyElement, App, AppContext, Context, Entity, Hsla, IntoElement, Radians, Render, RenderOnce,
+    SharedString, StyleRefinement, Styled, Svg, Transformation, Window,
+    prelude::FluentBuilder as _, svg,
 };
 use gpui_component_macros::icon_named;
 
@@ -81,7 +81,7 @@ impl Icon {
         icon.into()
     }
 
-    fn build(name: impl IconNamed) -> Self {
+    pub fn build(name: impl IconNamed) -> Self {
         Self::default().path(name.path())
     }
 
@@ -188,3 +188,4 @@ impl Render for Icon {
             })
     }
 }
+
