@@ -75,6 +75,7 @@ pub struct Example {
     indent_guides: bool,
     soft_wrap: bool,
     show_whitespaces: bool,
+    folding: bool,
     lsp_store: ExampleLspStore,
     _subscriptions: Vec<Subscription>,
     _lint_task: Task<()>,
@@ -234,13 +235,15 @@ impl CompletionProvider for ExampleLspStore {
                 };
 
             if let Some(insert_text) = suggestion {
-                Ok(InlineCompletionResponse::Array(vec![InlineCompletionItem {
-                    insert_text,
-                    filter_text: None,
-                    range: None,
-                    command: None,
-                    insert_text_format: Some(InsertTextFormat::SNIPPET),
-                }]))
+                Ok(InlineCompletionResponse::Array(vec![
+                    InlineCompletionItem {
+                        insert_text,
+                        filter_text: None,
+                        range: None,
+                        command: None,
+                        insert_text_format: Some(InsertTextFormat::SNIPPET),
+                    },
+                ]))
             } else {
                 Ok(InlineCompletionResponse::Array(vec![]))
             }
@@ -381,8 +384,14 @@ impl DefinitionProvider for ExampleLspStore {
 
         if word == "Duration" {
             let target_range = lsp_types::Range {
-                start: lsp_types::Position { line: 2, character: 4 },
-                end: lsp_types::Position { line: 2, character: 23 },
+                start: lsp_types::Position {
+                    line: 2,
+                    character: 4,
+                },
+                end: lsp_types::Position {
+                    line: 2,
+                    character: 23,
+                },
             };
             return Task::ready(Ok(vec![lsp_types::LocationLink {
                 target_uri: document_uri,
@@ -392,7 +401,10 @@ impl DefinitionProvider for ExampleLspStore {
             }]));
         }
 
-        let names = RUST_DOC_URLS.iter().map(|(name, _)| *name).collect::<Vec<_>>();
+        let names = RUST_DOC_URLS
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>();
         for (ix, t) in names.iter().enumerate() {
             if *t == word {
                 let url = RUST_DOC_URLS[ix].1;
@@ -449,7 +461,10 @@ impl CodeActionProvider for TextConvertor {
                 changes: Some(
                     std::iter::once((
                         document_uri.clone(),
-                        vec![TextEdit { range, new_text: old_text.to_uppercase() }],
+                        vec![TextEdit {
+                            range,
+                            new_text: old_text.to_uppercase(),
+                        }],
                     ))
                     .collect(),
                 ),
@@ -465,7 +480,10 @@ impl CodeActionProvider for TextConvertor {
                 changes: Some(
                     std::iter::once((
                         document_uri.clone(),
-                        vec![TextEdit { range, new_text: old_text.to_lowercase() }],
+                        vec![TextEdit {
+                            range,
+                            new_text: old_text.to_lowercase(),
+                        }],
                     ))
                     .collect(),
                 ),
@@ -646,8 +664,11 @@ fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<Tr
             {
                 continue;
             }
-            let file_name =
-                path.file_name().and_then(|n| n.to_str()).unwrap_or("Unknown").to_string();
+            let file_name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Unknown")
+                .to_string();
             let id = path.to_string_lossy().to_string();
             if path.is_dir() {
                 let children = build_file_items(ignorer, &root, &path);
@@ -657,7 +678,11 @@ fn build_file_items(ignorer: &Ignorer, root: &PathBuf, path: &PathBuf) -> Vec<Tr
             }
         }
     }
-    items.sort_by(|a, b| b.is_folder().cmp(&a.is_folder()).then(a.label.cmp(&b.label)));
+    items.sort_by(|a, b| {
+        b.is_folder()
+            .cmp(&a.is_folder())
+            .then(a.label.cmp(&b.label))
+    });
     items
 }
 
@@ -671,7 +696,10 @@ impl Example {
                 .code_editor(default_language.name().to_string())
                 .line_number(true)
                 .indent_guides(true)
-                .tab_size(TabSize { tab_size: 4, hard_tabs: false })
+                .tab_size(TabSize {
+                    tab_size: 4,
+                    hard_tabs: false,
+                })
                 .soft_wrap(false)
                 .default_value(include_str!("./fixtures/test.rs"))
                 .placeholder("Enter your code here...");
@@ -703,6 +731,7 @@ impl Example {
             indent_guides: true,
             soft_wrap: false,
             show_whitespaces: false,
+            folding: true,
             lsp_store,
             _subscriptions,
             _lint_task: Task::ready(()),
@@ -735,32 +764,35 @@ impl Example {
                 state.focus(window, cx);
             });
 
-            dialog.title("Go to line").child(Input::new(&input_state)).on_ok({
-                let editor = editor.clone();
-                let input_state = input_state.clone();
-                move |_, window, cx| {
-                    let query = input_state.read(cx).value();
-                    let mut parts = query
-                        .split(':')
-                        .map(|s| s.trim().parse::<usize>().ok())
-                        .collect::<Vec<_>>()
-                        .into_iter();
-                    let Some(line) = parts.next().and_then(|l| l) else {
-                        return false;
-                    };
-                    let column = parts.next().and_then(|c| c).unwrap_or(1);
-                    let position = input::Position::new(
-                        line.saturating_sub(1) as u32,
-                        column.saturating_sub(1) as u32,
-                    );
+            dialog
+                .title("Go to line")
+                .child(Input::new(&input_state))
+                .on_ok({
+                    let editor = editor.clone();
+                    let input_state = input_state.clone();
+                    move |_, window, cx| {
+                        let query = input_state.read(cx).value();
+                        let mut parts = query
+                            .split(':')
+                            .map(|s| s.trim().parse::<usize>().ok())
+                            .collect::<Vec<_>>()
+                            .into_iter();
+                        let Some(line) = parts.next().and_then(|l| l) else {
+                            return false;
+                        };
+                        let column = parts.next().and_then(|c| c).unwrap_or(1);
+                        let position = input::Position::new(
+                            line.saturating_sub(1) as u32,
+                            column.saturating_sub(1) as u32,
+                        );
 
-                    editor.update(cx, |state, cx| {
-                        state.set_cursor_position(position, window, cx);
-                    });
+                        editor.update(cx, |state, cx| {
+                            state.set_cursor_position(position, window, cx);
+                        });
 
-                    true
-                }
-            })
+                        true
+                    }
+                })
         });
     }
 
@@ -793,8 +825,10 @@ impl Example {
 
                 let range = text.position_to_offset(&start)..text.position_to_offset(&end);
 
-                let text_edit =
-                    TextEdit { range: lsp_types::Range { start, end }, new_text: item.new.clone() };
+                let text_edit = TextEdit {
+                    range: lsp_types::Range { start, end },
+                    new_text: item.new.clone(),
+                };
 
                 let edit = WorkspaceEdit {
                     changes: Some(
@@ -835,7 +869,9 @@ impl Example {
         cx.spawn_in(window, async move |_, window| {
             let path = path.await.ok()?.ok()??.iter().next()?.clone();
 
-            window.update(|window, cx| Self::open_file(view, path, window, cx)).ok()
+            window
+                .update(|window, cx| Self::open_file(view, path, window, cx))
+                .ok()
         })
         .detach();
     }
@@ -846,7 +882,10 @@ impl Example {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<()> {
-        let language = path.extension().and_then(|ext| ext.to_str()).unwrap_or_default();
+        let language = path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or_default();
         let language = Lang::from_str(&language);
         let content = std::fs::read_to_string(&path)?;
 
@@ -869,44 +908,47 @@ impl Example {
 
     fn render_file_tree(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let view = cx.entity();
-        tree(&self.tree_state, move |ix, entry, _selected, _window, cx| {
-            view.update(cx, |_, cx| {
-                let item = entry.item();
-                let icon = if !entry.is_folder() {
-                    IconName::File
-                } else if entry.is_expanded() {
-                    IconName::FolderOpen
-                } else {
-                    IconName::Folder
-                };
+        tree(
+            &self.tree_state,
+            move |ix, entry, _selected, _window, cx| {
+                view.update(cx, |_, cx| {
+                    let item = entry.item();
+                    let icon = if !entry.is_folder() {
+                        IconName::File
+                    } else if entry.is_expanded() {
+                        IconName::FolderOpen
+                    } else {
+                        IconName::Folder
+                    };
 
-                ListItem::new(ix)
-                    .w_full()
-                    .rounded(cx.theme().radius)
-                    .py_0p5()
-                    .px_2()
-                    .pl(px(16.) * entry.depth() + px(8.))
-                    .child(h_flex().gap_2().child(icon).child(item.label.clone()))
-                    .on_click(cx.listener({
-                        let item = item.clone();
-                        move |_, _, _window, cx| {
-                            if item.is_folder() {
-                                return;
+                    ListItem::new(ix)
+                        .w_full()
+                        .rounded(cx.theme().radius)
+                        .py_0p5()
+                        .px_2()
+                        .pl(px(16.) * entry.depth() + px(8.))
+                        .child(h_flex().gap_2().child(icon).child(item.label.clone()))
+                        .on_click(cx.listener({
+                            let item = item.clone();
+                            move |_, _, _window, cx| {
+                                if item.is_folder() {
+                                    return;
+                                }
+
+                                Self::open_file(
+                                    cx.entity(),
+                                    PathBuf::from(item.id.as_str()),
+                                    _window,
+                                    cx,
+                                )
+                                .ok();
+
+                                cx.notify();
                             }
-
-                            Self::open_file(
-                                cx.entity(),
-                                PathBuf::from(item.id.as_str()),
-                                _window,
-                                cx,
-                            )
-                            .ok();
-
-                            cx.notify();
-                        }
-                    }))
-            })
-        })
+                        }))
+                })
+            },
+        )
         .text_sm()
         .p_1()
         .bg(cx.theme().sidebar)
@@ -986,6 +1028,21 @@ impl Example {
             }))
     }
 
+    fn render_folding_button(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        Button::new("folding")
+            .ghost()
+            .xsmall()
+            .when(self.folding, |this| this.icon(IconName::Check))
+            .label("Folding")
+            .on_click(cx.listener(|this, _, window, cx| {
+                this.folding = !this.folding;
+                this.editor.update(cx, |state, cx| {
+                    state.set_folding(this.folding, window, cx);
+                });
+                cx.notify();
+            }))
+    }
+
     fn render_go_to_line_button(&self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let position = self.editor.read(cx).cursor_position();
         let cursor = self.editor.read(cx).cursor();
@@ -993,7 +1050,12 @@ impl Example {
         Button::new("line-column")
             .ghost()
             .xsmall()
-            .label(format!("{}:{} ({} byte)", position.line + 1, position.character + 1, cursor))
+            .label(format!(
+                "{}:{} ({} byte)",
+                position.line + 1,
+                position.character + 1,
+                cursor
+            ))
             .on_click(cx.listener(Self::go_to_line))
     }
 }
@@ -1012,50 +1074,55 @@ impl Render for Example {
             });
         }
 
-        v_flex().id("app").size_full().on_action(cx.listener(Self::on_action_open)).child(
-            v_flex()
-                .id("source")
-                .w_full()
-                .flex_1()
-                .child(
-                    h_resizable("editor-container")
-                        .child(
-                            resizable_panel()
-                                .size(px(240.))
-                                .child(self.render_file_tree(window, cx)),
-                        )
-                        .child(
-                            Input::new(&self.editor)
-                                .bordered(false)
-                                .p_0()
-                                .h_full()
-                                .font_family(cx.theme().mono_font_family.clone())
-                                .text_size(cx.theme().mono_font_size)
-                                .focus_bordered(false)
-                                .into_any_element(),
-                        ),
-                )
-                .child(
-                    h_flex()
-                        .justify_between()
-                        .text_sm()
-                        .bg(cx.theme().background)
-                        .py_1p5()
-                        .px_4()
-                        .border_t_1()
-                        .border_color(cx.theme().border)
-                        .text_color(cx.theme().muted_foreground)
-                        .child(
-                            h_flex()
-                                .gap_3()
-                                .child(self.render_line_number_button(window, cx))
-                                .child(self.render_soft_wrap_button(window, cx))
-                                .child(self.render_show_whitespaces_button(window, cx))
-                                .child(self.render_indent_guides_button(window, cx)),
-                        )
-                        .child(self.render_go_to_line_button(window, cx)),
-                ),
-        )
+        v_flex()
+            .id("app")
+            .size_full()
+            .on_action(cx.listener(Self::on_action_open))
+            .child(
+                v_flex()
+                    .id("source")
+                    .w_full()
+                    .flex_1()
+                    .child(
+                        h_resizable("editor-container")
+                            .child(
+                                resizable_panel()
+                                    .size(px(240.))
+                                    .child(self.render_file_tree(window, cx)),
+                            )
+                            .child(
+                                Input::new(&self.editor)
+                                    .bordered(false)
+                                    .p_0()
+                                    .h_full()
+                                    .font_family(cx.theme().mono_font_family.clone())
+                                    .text_size(cx.theme().mono_font_size)
+                                    .focus_bordered(false)
+                                    .into_any_element(),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .justify_between()
+                            .text_sm()
+                            .bg(cx.theme().background)
+                            .py_1p5()
+                            .px_4()
+                            .border_t_1()
+                            .border_color(cx.theme().border)
+                            .text_color(cx.theme().muted_foreground)
+                            .child(
+                                h_flex()
+                                    .gap_3()
+                                    .child(self.render_line_number_button(window, cx))
+                                    .child(self.render_soft_wrap_button(window, cx))
+                                    .child(self.render_show_whitespaces_button(window, cx))
+                                    .child(self.render_indent_guides_button(window, cx))
+                                    .child(self.render_folding_button(window, cx)),
+                            )
+                            .child(self.render_go_to_line_button(window, cx)),
+                    ),
+            )
     }
 }
 
