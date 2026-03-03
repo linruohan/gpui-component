@@ -1,68 +1,31 @@
-use anyhow::anyhow;
-use gpui::{App, AssetSource, Result, SharedString};
-use rust_embed::RustEmbed;
-use std::borrow::Cow;
-
 /// Embed application assets for GPUI Component.
 ///
 /// This assets provides icons svg files for [IconName](https://docs.rs/gpui-component/latest/gpui_component/enum.IconName.html).
 ///
-/// ```
+/// ## Usage
+///
+/// ```rust,no_run
 /// use gpui::*;
 /// use gpui_component_assets::Assets;
 ///
 /// let app = gpui_platform::application().with_assets(Assets);
 /// ```
-#[derive(RustEmbed)]
-#[folder = "assets"]
-#[include = "icons/**/*.svg"]
-#[include = "planify-icons/**/*.svg"]
-#[include = "fonts/**/*.ttf"]
-#[exclude = "*.DS_Store"]
-pub struct Assets;
+///
+/// ## Platform Differences
+///
+/// - **Native (Desktop)**: Icons are embedded in the binary using RustEmbed
+/// - **WASM (Web)**: Icons are downloaded from CDN using web_sys::Request
+///   - This significantly reduces WASM bundle size
+///   - Icons are downloaded on-demand when first used
+///   - Downloaded icons are cached in memory
+#[cfg(not(target_family = "wasm"))]
+mod native_assets;
 
-impl AssetSource for Assets {
-    fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        if path.is_empty() {
-            return Ok(None);
-        }
+#[cfg(target_family = "wasm")]
+mod wasm_assets;
 
-        Self::get(path)
-            .map(|f| Some(f.data))
-            .ok_or_else(|| anyhow!("could not find asset at path \"{path}\""))
-    }
+#[cfg(not(target_family = "wasm"))]
+pub use native_assets::Assets;
 
-    fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        Ok(Self::iter()
-            .filter_map(|p| p.starts_with(path).then(|| p.into()))
-            .collect())
-    }
-}
-
-impl Assets {
-    /// Populate the [`TextSystem`] of the given [`AppContext`] with all `.ttf` fonts in the `fonts` directory.
-    pub fn load_fonts(&self, cx: &App) -> gpui::Result<()> {
-        let font_paths = self.list("fonts")?;
-        let mut embedded_fonts = Vec::new();
-        for font_path in font_paths {
-            if font_path.ends_with(".ttf") {
-                let font_bytes = cx
-                    .asset_source()
-                    .load(&font_path)?
-                    .expect("Assets should never return None");
-                embedded_fonts.push(font_bytes);
-            }
-        }
-
-        cx.text_system().add_fonts(embedded_fonts)
-    }
-
-    pub fn load_test_fonts(&self, cx: &App) {
-        cx.text_system()
-            .add_fonts(vec![self
-                .load("fonts/LXGWWenKaiGB-Regular.ttf")
-                .unwrap()
-                .unwrap()])
-            .unwrap()
-    }
-}
+#[cfg(target_family = "wasm")]
+pub use wasm_assets::Assets;
