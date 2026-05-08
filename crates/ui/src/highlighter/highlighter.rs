@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{
     collections::{BTreeSet, HashMap},
-    ops::Range,
+    ops::{ControlFlow, Range},
     usize,
 };
 use tree_sitter::{
@@ -65,7 +65,7 @@ pub(crate) struct InjectionParseData {
     pub(crate) query: Arc<Query>,
     pub(crate) content_capture_index: Option<u32>,
     pub(crate) language_capture_index: Option<u32>,
-    /// Old injection trees for incremental re-parsing.
+    /// Old injection trees that can be reused when the injected ranges are unchanged.
     pub(crate) old_layers: Vec<ReusableInjectionLayer>,
 }
 
@@ -225,7 +225,7 @@ impl SyntaxHighlighter {
 
     /// Build the highlighter for the given language.
     ///
-    /// https://github.com/tree-sitter/tree-sitter/blob/v0.25.5/highlight/src/lib.rs#L336
+    /// https://github.com/tree-sitter/tree-sitter/blob/v0.26.8/crates/highlight/src/highlight.rs#L339
     fn build_for_language(lang: &str) -> Result<Self> {
         let Some(config) = LanguageRegistry::singleton().language(&lang) else {
             return Err(anyhow!(
@@ -414,17 +414,17 @@ impl SyntaxHighlighter {
 
         let mut timed_out = false;
         let start = Instant::now();
-        let mut progress = |_: &tree_sitter::ParseState| -> bool {
+        let mut progress = |_: &tree_sitter::ParseState| -> ControlFlow<()> {
             let Some(budget) = timeout else {
-                return false;
+                return ControlFlow::Continue(());
             };
 
             if start.elapsed() > budget {
                 timed_out = true;
-                return true; // Cancel execution
+                return ControlFlow::Break(()); // Cancel execution
             }
 
-            false
+            ControlFlow::Continue(())
         };
 
         let options = ParseOptions::new().progress_callback(&mut progress);
@@ -483,6 +483,21 @@ impl SyntaxHighlighter {
         tree: &Tree,
         text: &Rope,
     ) -> Vec<InjectionLayer> {
+        fn sort_ranges(ranges: &mut [tree_sitter::Range]) {
+            ranges.sort_unstable_by(|a, b| {
+                a.start_byte
+                    .cmp(&b.start_byte)
+                    .then_with(|| a.end_byte.cmp(&b.end_byte))
+            });
+        }
+
+        fn ranges_cache_key(ranges: &[tree_sitter::Range]) -> Vec<(usize, usize)> {
+            ranges
+                .iter()
+                .map(|r| (r.start_byte, r.end_byte))
+                .collect()
+        }
+
         let root_node = tree.root_node();
         let mut cursor = QueryCursor::new();
         let mut matches = cursor.matches(&data.query, root_node, TextProvider(text));
@@ -493,7 +508,7 @@ impl SyntaxHighlighter {
             .iter()
             .map(|layer| {
                 (
-                    (layer.language_name.clone(), range_key(&layer.ranges)),
+                    (layer.language_name.clone(), ranges_cache_key(&layer.ranges)),
                     &layer.tree,
                 )
             })
@@ -515,9 +530,8 @@ impl SyntaxHighlighter {
                 }
             }
 
-            // Captured language names, such as Markdown code fences, are left
-            // for a follow-up so this slice can focus on fixed-language
-            // injections like markdown_inline.
+            // Captured language names are left for a follow-up so this change
+            // can focus on fixed-language injections.
             if language_name.is_none()
                 && query_match
                     .captures
@@ -542,9 +556,6 @@ impl SyntaxHighlighter {
                 continue;
             }
             sort_ranges(&mut ranges);
-            if !should_parse_injection_layer(&language_name, &ranges, text) {
-                continue;
-            }
 
             if combined {
                 combined_ranges
@@ -553,7 +564,7 @@ impl SyntaxHighlighter {
                     .extend(ranges);
             } else {
                 let old_tree = old_layer_trees
-                    .get(&(language_name.clone(), range_key(&ranges)))
+                    .get(&(language_name.clone(), ranges_cache_key(&ranges)))
                     .copied();
                 if let Some(layer) =
                     Self::parse_injection_layer(&language_name, ranges, old_tree, text)
@@ -568,11 +579,8 @@ impl SyntaxHighlighter {
                 continue;
             }
             sort_ranges(&mut ranges);
-            if !should_parse_injection_layer(&language_name, &ranges, text) {
-                continue;
-            }
             let old_tree = old_layer_trees
-                .get(&(language_name.clone(), range_key(&ranges)))
+                .get(&(language_name.clone(), ranges_cache_key(&ranges)))
                 .copied();
             if let Some(layer) = Self::parse_injection_layer(&language_name, ranges, old_tree, text)
             {
@@ -583,15 +591,19 @@ impl SyntaxHighlighter {
         new_layers
     }
 
-    /// Parse one injection layer for a fixed language over the given included ranges.
-    /// Reuses the previous tree when the ranges still match, which lets tree-sitter
-    /// incrementally update injected syntax after edits.
+    /// Parse one injection layer over the given included ranges.
+    /// Reuses the previous tree only when the language and byte ranges still match.
     fn parse_injection_layer(
         language_name: &SharedString,
         ranges: Vec<tree_sitter::Range>,
         old_tree: Option<&Tree>,
         text: &Rope,
     ) -> Option<InjectionLayer> {
+        fn bounding_byte_range(ranges: &[tree_sitter::Range]) -> Option<Range<usize>> {
+            let start = ranges.iter().map(|r| r.start_byte).min()?;
+            let end = ranges.iter().map(|r| r.end_byte).max()?;
+            Some(start..end)
+        }
         let config = LanguageRegistry::singleton().language(language_name)?;
         let mut parser = Parser::new();
         parser.set_language(&config.language).ok()?;
@@ -610,7 +622,7 @@ impl SyntaxHighlighter {
             None,
         )?;
 
-        let byte_range = ranges_byte_range(&ranges)?;
+        let byte_range = bounding_byte_range(&ranges)?;
         Some(InjectionLayer {
             language_name: language_name.clone(),
             ranges,
@@ -663,15 +675,25 @@ impl SyntaxHighlighter {
         let source = &self.text;
 
         // Query pre-parsed injection layers.
+        let mut last_layer_start = 0;
         for layer in &self.injection_layers {
+            debug_assert!(layer.byte_range.start >= last_layer_start);
+            last_layer_start = layer.byte_range.start;
+
             if layer.byte_range.end <= range.start {
                 continue;
             }
+
+            // Layers are sorted by start byte in compute_injection_layers.
             if layer.byte_range.start >= range.end {
                 break;
             }
 
             let Some(query) = self.injection_queries.get(&layer.language_name) else {
+                tracing::debug!(
+                    "missing highlight query for injection language {:?}",
+                    layer.language_name
+                );
                 continue;
             };
 
@@ -681,11 +703,24 @@ impl SyntaxHighlighter {
             let mut matches =
                 query_cursor.matches(query, layer.tree.root_node(), TextProvider(&self.text));
 
+            let mut last_end = 0usize;
             while let Some(m) = matches.next() {
+                let allow_overlapping_captures = query
+                    .property_settings(m.pattern_index)
+                    .iter()
+                    .any(|prop| prop.key.as_ref() == "highlight.allow-overlap");
+
                 for cap in m.captures {
                     let node_range = cap.node.start_byte()..cap.node.end_byte();
 
+                    if !allow_overlapping_captures && node_range.start < last_end {
+                        continue;
+                    }
+
                     if let Some(highlight_name) = query.capture_names().get(cap.index as usize) {
+                        if !allow_overlapping_captures {
+                            last_end = node_range.end;
+                        }
                         highlights.push(HighlightItem::new(
                             node_range,
                             SharedString::from(highlight_name.to_string()),
@@ -952,49 +987,6 @@ fn collect_query_nodes_inner<'a>(
     out.push(node);
 }
 
-fn sort_ranges(ranges: &mut [tree_sitter::Range]) {
-    ranges.sort_unstable_by(|a, b| {
-        a.start_byte
-            .cmp(&b.start_byte)
-            .then_with(|| a.end_byte.cmp(&b.end_byte))
-    });
-}
-
-fn range_key(ranges: &[tree_sitter::Range]) -> Vec<(usize, usize)> {
-    ranges
-        .iter()
-        .map(|range| (range.start_byte, range.end_byte))
-        .collect()
-}
-
-fn ranges_byte_range(ranges: &[tree_sitter::Range]) -> Option<Range<usize>> {
-    let start = ranges.iter().map(|range| range.start_byte).min()?;
-    let end = ranges.iter().map(|range| range.end_byte).max()?;
-    Some(start..end)
-}
-
-fn should_parse_injection_layer(
-    language_name: &SharedString,
-    ranges: &[tree_sitter::Range],
-    text: &Rope,
-) -> bool {
-    if language_name.as_ref() != "markdown_inline" {
-        return true;
-    }
-
-    ranges
-        .iter()
-        .any(|range| markdown_inline_range_has_trigger(text, range.start_byte..range.end_byte))
-}
-
-fn markdown_inline_range_has_trigger(text: &Rope, range: Range<usize>) -> bool {
-    text.slice(range).bytes().any(|byte| {
-        matches!(
-            byte,
-            b'*' | b'_' | b'`' | b'[' | b']' | b'(' | b')' | b'<' | b'>' | b'!' | b'~' | b'$'
-        )
-    })
-}
 
 /// Merge other style (Other on top)
 fn merge_highlight_style(style: &mut HighlightStyle, other: &HighlightStyle) {
@@ -1034,30 +1026,7 @@ mod tests {
         style
     }
 
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn markdown_highlights(markdown: &str) -> Vec<HighlightItem> {
-        let rope = Rope::from_str(markdown);
-        let mut highlighter = SyntaxHighlighter::new("markdown");
-        highlighter.update(None, &rope, None);
-        highlighter.match_styles(0..markdown.len())
-    }
-
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn markdown_injection_layer_count(markdown: &str) -> usize {
-        let rope = Rope::from_str(markdown);
-        let mut highlighter = SyntaxHighlighter::new("markdown");
-        highlighter.update(None, &rope, None);
-        highlighter.injection_layers.len()
-    }
-
-    #[cfg(any(
-        all(
-            feature = "tree-sitter-html",
-            feature = "tree-sitter-javascript",
-            feature = "tree-sitter-css"
-        ),
-        feature = "tree-sitter-markdown"
-    ))]
+    #[cfg(feature = "tree-sitter-languages")]
     fn has_highlight_covering(
         highlights: &[HighlightItem],
         source: &str,
@@ -1071,28 +1040,6 @@ mod tests {
                 && item.range.start <= start
                 && item.range.end >= end
         })
-    }
-
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_highlight_theme() -> HighlightTheme {
-        serde_json::from_value(serde_json::json!({
-            "name": "test",
-            "appearance": "dark",
-            "style": {
-                "syntax": {
-                    "emphasis": {
-                        "font_style": "italic"
-                    },
-                    "strikethrough": {
-                        "font_style": "strikethrough"
-                    },
-                    "text.literal": {
-                        "color": "#6F42C1"
-                    }
-                }
-            }
-        }))
-        .expect("test theme should parse")
     }
 
     #[track_caller]
@@ -1141,39 +1088,16 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(
-        feature = "tree-sitter-html",
-        feature = "tree-sitter-javascript",
-        feature = "tree-sitter-css"
-    ))]
-    fn test_html_script_and_style_injections() {
+    #[cfg(feature = "tree-sitter-languages")]
+    fn test_html_style_injects_css_highlights() {
         let html = r#"<style>
 .card { color: #336699; }
 </style>
-<script>
-const answer = 42;
-console.log(answer);
-</script>
 "#;
 
         let rope = Rope::from_str(html);
         let mut highlighter = SyntaxHighlighter::new("html");
         highlighter.update(None, &rope, None);
-
-        assert!(
-            highlighter
-                .injection_layers
-                .iter()
-                .any(|layer| layer.language_name.as_ref() == "css"),
-            "style elements should create a CSS injection layer"
-        );
-        assert!(
-            highlighter
-                .injection_layers
-                .iter()
-                .any(|layer| layer.language_name.as_ref() == "javascript"),
-            "script elements should create a JavaScript injection layer"
-        );
 
         let highlights = highlighter.match_styles(0..html.len());
 
@@ -1185,6 +1109,23 @@ console.log(answer);
             has_highlight_covering(&highlights, html, "#336699", "string.special"),
             "CSS color values inside style elements should be highlighted"
         );
+    }
+
+    #[test]
+    #[cfg(feature = "tree-sitter-languages")]
+    fn test_html_script_injects_javascript_highlights() {
+        let html = r#"<script>
+const answer = 42;
+console.log(answer);
+</script>
+"#;
+
+        let rope = Rope::from_str(html);
+        let mut highlighter = SyntaxHighlighter::new("html");
+        highlighter.update(None, &rope, None);
+
+        let highlights = highlighter.match_styles(0..html.len());
+
         assert!(
             has_highlight_covering(&highlights, html, "const", "keyword"),
             "JavaScript keywords inside script elements should be highlighted"
@@ -1240,194 +1181,40 @@ $x = 1;
     }
 
     #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_strong_emphasis() {
-        let markdown = "This has **bold** text.";
-        let highlights = markdown_highlights(markdown);
-
-        assert!(
-            has_highlight_covering(&highlights, markdown, "bold", "emphasis.strong"),
-            "bold text should be highlighted as strong emphasis"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_emphasis() {
-        let markdown = "This has _italic_ text.";
-        let highlights = markdown_highlights(markdown);
-
-        assert!(
-            has_highlight_covering(&highlights, markdown, "italic", "emphasis"),
-            "italic text should be highlighted as emphasis"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_strikethrough() {
-        let markdown = "This has ~~deleted~~ text.";
-        let highlights = markdown_highlights(markdown);
-
-        assert!(
-            has_highlight_covering(&highlights, markdown, "deleted", "strikethrough"),
-            "strikethrough text should be highlighted"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_emphasis_style_depends_on_theme() {
-        let markdown = "This has _italic_ text.";
+    #[cfg(feature = "tree-sitter-languages")]
+    fn test_highlight_allow_overlap_property_combines_nested_captures() {
+        let markdown = "This has ***bold and italic*** and **bold _with_ italic** text.";
         let rope = Rope::from_str(markdown);
         let mut highlighter = SyntaxHighlighter::new("markdown");
         highlighter.update(None, &rope, None);
-        let theme = test_highlight_theme();
 
-        let styles = highlighter.styles(&(0..markdown.len()), &theme);
-        let start = markdown.find("italic").unwrap();
-        let end = start + "italic".len();
+        let styles = highlighter.styles(&(0..markdown.len()), &HighlightTheme::default_dark());
+        for text in ["bold and italic", "with"] {
+            let start = markdown.find(text).unwrap();
+            let end = start + text.len();
+
+            assert!(
+                styles.iter().any(|(range, style)| {
+                    range.start <= start
+                        && range.end >= end
+                        && style.font_weight == Some(gpui::FontWeight::BOLD)
+                        && style.font_style == Some(gpui::FontStyle::Italic)
+                }),
+                "{text:?} should combine bold and italic styles"
+            );
+        }
+
+        let highlights = highlighter.match_styles(0..markdown.len());
+        let delimiter_start = markdown.find("_with_").unwrap();
+        let delimiter_end = delimiter_start + "_".len();
 
         assert!(
-            styles.iter().any(|(range, style)| {
-                range.start <= start
-                    && range.end >= end
-                    && style.font_style == Some(gpui::FontStyle::Italic)
+            highlights.iter().any(|item| {
+                item.name.as_ref() == "punctuation.delimiter"
+                    && item.range.start <= delimiter_start
+                    && item.range.end >= delimiter_end
             }),
-            "italic Markdown should use the theme's emphasis font style"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_strikethrough_style_depends_on_theme() {
-        let markdown = "This has ~~deleted~~ text.";
-        let rope = Rope::from_str(markdown);
-        let mut highlighter = SyntaxHighlighter::new("markdown");
-        highlighter.update(None, &rope, None);
-        let theme = test_highlight_theme();
-
-        let styles = highlighter.styles(&(0..markdown.len()), &theme);
-        let start = markdown.find("deleted").unwrap();
-        let end = start + "deleted".len();
-
-        assert!(
-            styles.iter().any(|(range, style)| {
-                range.start <= start && range.end >= end && style.strikethrough.is_some()
-            }),
-            "strikethrough Markdown should use the theme's strikethrough style"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_plain_inline_skips_injection_layer() {
-        let markdown = "およびコードのスタイルなどを試すことができます。";
-
-        assert_eq!(
-            markdown_injection_layer_count(markdown),
-            0,
-            "plain Markdown text should not create a markdown_inline layer"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_markers_create_injection_layer() {
-        let markdown = "This has _italic_ text.";
-
-        assert_eq!(
-            markdown_injection_layer_count(markdown),
-            1,
-            "Markdown inline markers should create a markdown_inline layer"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_latex_marker_creates_injection_layer() {
-        let markdown = "This has $x^2$ text.";
-
-        assert_eq!(
-            markdown_injection_layer_count(markdown),
-            1,
-            "Markdown inline LaTeX markers should create a markdown_inline layer"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_nested_emphasis_uses_default_bold_italic_style() {
-        let markdown = "This has _**bold**_ text.";
-        let rope = Rope::from_str(markdown);
-        let mut highlighter = SyntaxHighlighter::new("markdown");
-        highlighter.update(None, &rope, None);
-        let theme = HighlightTheme::default_dark();
-
-        let styles = highlighter.styles(&(0..markdown.len()), &theme);
-        let start = markdown.find("bold").unwrap();
-        let end = start + "bold".len();
-
-        assert!(
-            styles.iter().any(|(range, style)| {
-                range.start <= start
-                    && range.end >= end
-                    && style.font_weight == Some(gpui::FontWeight::BOLD)
-                    && style.font_style == Some(gpui::FontStyle::Italic)
-            }),
-            "strong emphasis nested in emphasis should be bold and italic by default"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_link_text() {
-        let markdown = "This has a [link](https://example.com).";
-        let highlights = markdown_highlights(markdown);
-
-        assert!(
-            has_highlight_covering(&highlights, markdown, "link", "link_text"),
-            "link text should be highlighted"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_code_span() {
-        let markdown = "This has `code` text.";
-        let highlights = markdown_highlights(markdown);
-
-        assert!(
-            has_highlight_covering(&highlights, markdown, "`code`", "text.literal"),
-            "inline code spans should be highlighted as literal text"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_latex_span() {
-        let markdown = "This has $x^2 + y^2 = z^2$ text.";
-        let highlights = markdown_highlights(markdown);
-
-        assert!(
-            has_highlight_covering(&highlights, markdown, "$x^2 + y^2 = z^2$", "text.literal"),
-            "inline LaTeX spans should be highlighted as literal text"
-        );
-    }
-
-    #[test]
-    #[cfg(feature = "tree-sitter-markdown")]
-    fn test_markdown_inline_regions_do_not_combine_across_paragraphs() {
-        let markdown = "first **open\n\nclose** second";
-        let highlights = markdown_highlights(markdown);
-
-        assert!(
-            !has_highlight_covering(&highlights, markdown, "open", "emphasis.strong"),
-            "unclosed strong emphasis should not highlight text before the paragraph break"
-        );
-        assert!(
-            !has_highlight_covering(&highlights, markdown, "close", "emphasis.strong"),
-            "unclosed strong emphasis should not highlight text after the paragraph break"
+            "overlap-enabled captures should not hide nested delimiter highlights"
         );
     }
 

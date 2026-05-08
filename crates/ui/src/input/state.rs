@@ -4,7 +4,7 @@
 //! https://github.com/zed-industries/zed/blob/main/crates/gpui/examples/input.rs
 use anyhow::Result;
 use gpui::{
-    Action, App, AppContext, Bounds, ClipboardItem, Context, Entity, EntityInputHandler,
+    Action, App, AppContext, Bounds, ClipboardItem, Context, Edges, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyBinding,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
     Pixels, Point, Render, ScrollHandle, ScrollWheelEvent, ShapedLine, SharedString, Styled as _,
@@ -14,14 +14,20 @@ use gpui::{
 use gpui::{Half, TextAlign};
 use ropey::{Rope, RopeSlice};
 use serde::Deserialize;
+use std::cell::Cell;
 use std::ops::Range;
 use std::rc::Rc;
 use sum_tree::Bias;
 use unicode_segmentation::*;
 
 use super::{
-    DisplayMap, MASK_CHAR, blink_cursor::BlinkCursor, change::Change, element::TextElement,
-    mask_pattern::MaskPattern, mode::InputMode, number_input,
+    DisplayMap, MASK_CHAR,
+    blink_cursor::BlinkCursor,
+    change::Change,
+    element::{EditorScrollbarSnapshot, TextElement},
+    mask_pattern::MaskPattern,
+    mode::InputMode,
+    number_input,
 };
 use crate::Size;
 use crate::actions::{SelectDown, SelectLeft, SelectRight, SelectUp};
@@ -335,6 +341,8 @@ pub struct InputState {
     pub(crate) deferred_scroll_offset: Option<Point<Pixels>>,
     /// The size of the scrollable content.
     pub(crate) scroll_size: gpui::Size<Pixels>,
+    pub(super) editor_scrollbar_paddings: Cell<Edges<Pixels>>,
+    pub(super) editor_scrollbar_snapshot: Cell<Option<EditorScrollbarSnapshot>>,
     pub(super) text_align: TextAlign,
 
     /// The mask pattern for formatting the input text
@@ -447,6 +455,13 @@ impl InputState {
             last_cursor: None,
             scroll_handle: ScrollHandle::new(),
             scroll_size: gpui::size(px(0.), px(0.)),
+            editor_scrollbar_paddings: Cell::new(Edges {
+                top: px(0.),
+                right: px(0.),
+                bottom: px(0.),
+                left: px(0.),
+            }),
+            editor_scrollbar_snapshot: Cell::new(None),
             deferred_scroll_offset: None,
             preferred_column: None,
             placeholder: SharedString::default(),
@@ -2182,6 +2197,7 @@ impl InputState {
         let parse_task_rc = pending.parse_task;
         let language = pending.language;
         let text = pending.text;
+        let is_folding = pending.is_folding;
 
         let old_tree = highlighter_rc
             .borrow()
@@ -2232,19 +2248,28 @@ impl InputState {
                         Default::default()
                     };
 
-                    Some((new_tree, injection_layers))
+                    // Walk the syntax tree to extract fold ranges off the main thread.
+                    let fold_ranges = if is_folding {
+                        crate::input::display_map::extract_fold_ranges(&new_tree)
+                    } else {
+                        Vec::new()
+                    };
+
+                    Some((new_tree, injection_layers, fold_ranges))
                 })
                 .await;
 
-            if let Some((new_tree, injection_layers)) = result {
+            if let Some((new_tree, injection_layers, fold_ranges)) = result {
                 if let Some(h) = highlighter_rc.borrow_mut().as_mut() {
                     h.apply_background_tree(new_tree, &text_for_apply, injection_layers);
                 }
 
-                // Trigger re-render so the new highlights are displayed.
-                // Also update fold candidates now that the tree is ready.
+                // Trigger re-render so the new highlights are displayed and
+                // apply the fold candidates extracted in the background.
                 _ = entity.update(cx, |state, cx| {
-                    state.update_fold_candidates();
+                    if is_folding {
+                        state.display_map.set_fold_candidates(fold_ranges);
+                    }
                     cx.notify();
                 });
             }
@@ -2364,7 +2389,7 @@ impl EntityInputHandler for InputState {
 
         let bg = self
             .mode
-            .update_highlighter(&range, &self.text, &new_text, true, cx);
+            .update_highlighter(&range, &old_text, &self.text, &new_text, true, cx);
         if let Some(bg) = bg {
             Self::dispatch_background_parse(bg, window, cx);
         }
@@ -2431,7 +2456,7 @@ impl EntityInputHandler for InputState {
 
         let bg = self
             .mode
-            .update_highlighter(&range, &self.text, &new_text, true, cx);
+            .update_highlighter(&range, &old_text, &self.text, &new_text, true, cx);
         if let Some(bg) = bg {
             Self::dispatch_background_parse(bg, window, cx);
         }
@@ -2548,7 +2573,7 @@ impl Render for InputState {
         if self._pending_update {
             let bg = self
                 .mode
-                .update_highlighter(&(0..0), &self.text, "", false, cx);
+                .update_highlighter(&(0..0), &self.text, &self.text, "", false, cx);
             if let Some(bg) = bg {
                 Self::dispatch_background_parse(bg, window, cx);
             }

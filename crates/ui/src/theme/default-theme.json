@@ -182,9 +182,6 @@
           "string.special.symbol": {
             "color": "#d21f07"
           },
-          "strikethrough": {
-            "font_style": "strikethrough"
-          },
           "tag": {
             "color": "#0433ff"
           },
@@ -391,9 +388,6 @@
           },
           "string.special.symbol": {
             "color": "#E1D797"
-          },
-          "strikethrough": {
-            "font_style": "strikethrough"
           },
           "tag": {
             "color": "#b5af9a"
