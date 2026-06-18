@@ -20,9 +20,10 @@ use crate::{
     input::{InputEdit, Point, RopeExt as _},
     scroll::horizontal_scroll_area,
     text::{
-        CodeBlockActionsFn,
+        CodeBlockActionsFn, MarkdownExtensions, MarkdownNode,
         document::NodeRenderOptions,
         inline::{Inline, InlineState},
+        inline_flow::{InlineFlow, InlineFlowItem},
     },
     tooltip::Tooltip,
     v_flex,
@@ -67,6 +68,8 @@ pub(crate) enum BlockNode {
         span: Option<Span>,
     },
     CodeBlock(CodeBlock),
+    /// A custom Markdown node produced by [`MarkdownExtensions`].
+    Custom(MarkdownNode),
     Table(Table),
     Break {
         html: bool,
@@ -96,10 +99,6 @@ impl BlockNode {
         matches!(self, Self::ListItem { .. })
     }
 
-    pub(super) fn is_break(&self) -> bool {
-        matches!(self, Self::Break { .. })
-    }
-
     /// Combine all children, omitting the empt parent nodes.
     pub(super) fn compact(self) -> BlockNode {
         match self {
@@ -118,6 +117,7 @@ impl BlockNode {
             BlockNode::List { span, .. } => *span,
             BlockNode::ListItem { span, .. } => *span,
             BlockNode::CodeBlock(code_block) => code_block.span,
+            BlockNode::Custom(el) => el.span,
             BlockNode::Table(table) => table.span,
             BlockNode::Break { span, .. } => *span,
             BlockNode::HorizontalRule { span, .. } => *span,
@@ -206,6 +206,15 @@ impl BlockNode {
                     text.push('\n');
                 }
             }
+            BlockNode::Custom(node) => {
+                if let BlockTextKind::All = kind {
+                    let content = node.as_text();
+                    if !content.is_empty() {
+                        text.push_str(content);
+                        text.push('\n');
+                    }
+                }
+            }
             BlockNode::Definition { .. }
             | BlockNode::Break { .. }
             | BlockNode::HorizontalRule { .. }
@@ -248,7 +257,8 @@ impl BlockNode {
                 }
             }
             BlockNode::CodeBlock(code_block) => code_block.clear_selection(),
-            BlockNode::Definition { .. }
+            BlockNode::Custom { .. }
+            | BlockNode::Definition { .. }
             | BlockNode::Break { .. }
             | BlockNode::HorizontalRule { .. }
             | BlockNode::Unknown { .. } => {}
@@ -753,6 +763,7 @@ pub(crate) struct NodeContext {
     pub(crate) link_refs: HashMap<SharedString, LinkMark>,
     pub(crate) style: TextViewStyle,
     pub(crate) code_block_actions: Option<Arc<CodeBlockActionsFn>>,
+    pub(crate) markdown_extensions: Arc<MarkdownExtensions>,
 }
 
 impl NodeContext {
@@ -764,19 +775,23 @@ impl NodeContext {
 impl PartialEq for NodeContext {
     fn eq(&self, other: &Self) -> bool {
         self.link_refs == other.link_refs && self.style == other.style
-        // Note: code_block_buttons is intentionally not compared (closures can't be compared)
+        // Note: code_block_actions and markdown_extensions are intentionally
+        // not compared (closures can't be compared)
     }
 }
 
 impl Paragraph {
-    fn render(
-        &self,
-        node_cx: &NodeContext,
-        _window: &mut Window,
-        cx: &mut App,
-    ) -> impl IntoElement {
+    fn render(&self, node_cx: &NodeContext, _window: &mut Window, cx: &mut App) -> AnyElement {
         let span = self.span;
         let children = &self.children;
+
+        if self.should_render_inline_flow() {
+            return InlineFlow::new(
+                span.unwrap_or_default(),
+                self.inline_flow_items(node_cx, cx),
+            )
+            .into_any_element();
+        }
 
         let mut child_nodes: Vec<AnyElement> = vec![];
 
@@ -893,7 +908,119 @@ impl Paragraph {
                 .push(Inline::new(ix, self.state.clone(), links, highlights).into_any_element());
         }
 
-        div().id(span.unwrap_or_default()).children(child_nodes)
+        div()
+            .id(span.unwrap_or_default())
+            .children(child_nodes)
+            .into_any_element()
+    }
+
+    fn should_render_inline_flow(&self) -> bool {
+        let has_image = self.children.iter().any(|child| child.image.is_some());
+        let has_text = self.children.iter().any(|child| !child.text.is_empty());
+        has_image && has_text
+    }
+
+    fn inline_flow_items(&self, node_cx: &NodeContext, cx: &mut App) -> Vec<InlineFlowItem> {
+        let mut items = Vec::new();
+        let mut text = String::new();
+        let mut highlights: Vec<(Range<usize>, HighlightStyle)> = vec![];
+        let mut links: Vec<(Range<usize>, LinkMark)> = vec![];
+        let mut offset = 0;
+
+        for inline_node in &self.children {
+            let text_len = inline_node.text.len();
+            text.push_str(&inline_node.text);
+
+            if let Some(image) = &inline_node.image {
+                if !text.is_empty() {
+                    if let Ok(mut state) = inline_node.state.lock() {
+                        state.set_text(text.clone().into());
+                    }
+                    items.push(InlineFlowItem::Text {
+                        state: inline_node.state.clone(),
+                        text: text.clone().into(),
+                        links: links.clone(),
+                        highlights: highlights.clone(),
+                    });
+                }
+
+                items.push(InlineFlowItem::Image {
+                    url: image.url.clone(),
+                    link: image.link.clone(),
+                    title: image.title(),
+                    width: image.width,
+                    height: image.height,
+                });
+
+                text.clear();
+                links.clear();
+                highlights.clear();
+                offset = 0;
+            } else {
+                let mut node_highlights = vec![];
+                for (range, style) in &inline_node.marks {
+                    let inner_range = (offset + range.start)..(offset + range.end);
+
+                    let mut highlight = HighlightStyle::default();
+                    if style.bold {
+                        highlight.font_weight = Some(FontWeight::BOLD);
+                    }
+                    if style.italic {
+                        highlight.font_style = Some(FontStyle::Italic);
+                    }
+                    if style.strikethrough {
+                        highlight.strikethrough = Some(gpui::StrikethroughStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
+                    if style.underline {
+                        highlight.underline = Some(gpui::UnderlineStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+                    }
+                    if style.code {
+                        highlight.background_color = Some(cx.theme().accent);
+                    }
+
+                    if let Some(mut link_mark) = style.link.clone() {
+                        highlight.color = Some(cx.theme().link);
+                        highlight.underline = Some(gpui::UnderlineStyle {
+                            thickness: gpui::px(1.),
+                            ..Default::default()
+                        });
+
+                        if let Some(identifier) = link_mark.identifier.as_ref()
+                            && let Some(mark) = node_cx.link_refs.get(identifier)
+                        {
+                            link_mark = mark.clone();
+                        }
+
+                        links.push((inner_range.clone(), link_mark));
+                    }
+
+                    node_highlights.push((inner_range, highlight));
+                }
+
+                highlights = gpui::combine_highlights(highlights, node_highlights).collect();
+                offset += text_len;
+            }
+        }
+
+        if !text.is_empty() {
+            if let Ok(mut state) = self.state.lock() {
+                state.set_text(text.clone().into());
+            }
+            items.push(InlineFlowItem::Text {
+                state: self.state.clone(),
+                text: text.into(),
+                links,
+                highlights,
+            });
+        }
+
+        items
     }
 }
 
@@ -1061,6 +1188,7 @@ impl BlockNode {
                 }
             }
             BlockNode::HorizontalRule { .. } => "---".to_string(),
+            BlockNode::Custom(node) => node.to_markdown(),
             BlockNode::Definition {
                 identifier,
                 url,
@@ -1559,6 +1687,14 @@ impl BlockNode {
                 })
                 .into_any_element(),
             BlockNode::CodeBlock(code_block) => code_block.render(&options, node_cx, window, cx),
+            BlockNode::Custom(node) => {
+                let inner = match node_cx.markdown_extensions.render_block(node, window, cx) {
+                    Some(rendered) => rendered,
+                    None => div().child(node.as_text().to_string()).into_any_element(),
+                };
+
+                div().pb(mb).child(inner).into_any_element()
+            }
             BlockNode::Table { .. } => {
                 Self::render_table(self, &options, node_cx, window, cx).into_any_element()
             }
