@@ -435,7 +435,6 @@ impl<E: SidebarItem> RenderOnce for Sidebar<E> {
                 this.child(
                     h_flex()
                         .id("header")
-                        .min_w_0()
                         .pt_3()
                         .px_3()
                         .gap_2()
