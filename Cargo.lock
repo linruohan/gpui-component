@@ -3059,6 +3059,7 @@ dependencies = [
  "tree-sitter-typescript",
  "tree-sitter-yaml",
  "tree-sitter-zig",
+ "tyme4rs",
  "unicode-segmentation",
  "uuid",
  "windows 0.58.0",
@@ -9012,6 +9013,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
 dependencies = [
  "core_maths",
+]
+
+[[package]]
+name = "tyme4rs"
+version = "1.5.0"
+source = "git+https://github.com/linruohan/tyme4rs.git#12fc5a797d57e680e1fb3cc8b33a50ba1f9b1e13"
+dependencies = [
+ "lazy_static",
+ "regex",
 ]
 
 [[package]]
