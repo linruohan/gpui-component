@@ -3136,7 +3136,6 @@ dependencies = [
  "tree-sitter-yaml",
  "tree-sitter-zig",
  "tyme4rs",
- "unicode-segmentation",
  "uuid",
  "windows 0.58.0",
  "zed-sum-tree",
