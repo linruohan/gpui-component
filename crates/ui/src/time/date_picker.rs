@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use chrono::NaiveDate;
+use chrono::{NaiveDate, Weekday};
 use gpui::{
     App, AppContext, ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle,
     Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement as _,
@@ -9,6 +9,7 @@ use gpui::{
 };
 use rust_i18n::t;
 
+use crate::ThemeStyled as _;
 use crate::{
     ActiveTheme, Disableable, Icon, IconName, Sizable, Size, StyleSized as _, StyledExt as _,
     actions::{Cancel, Confirm},
@@ -19,6 +20,7 @@ use crate::{
 };
 
 use super::calendar::{Calendar, CalendarEvent, CalendarState, Date, Matcher};
+use gpui_base::DatePicker as BaseDatePicker;
 
 const CONTEXT: &'static str = "DatePicker";
 pub(crate) fn init(cx: &mut App) {
@@ -77,6 +79,8 @@ pub struct DatePickerState {
     number_of_months: usize,
     disabled_matcher: Option<Rc<Matcher>>,
     _subscriptions: Vec<Subscription>,
+    /// The first day of the week. Defaults to Sunday.
+    first_day_of_week: Weekday,
 }
 
 impl Focusable for DatePickerState {
@@ -130,6 +134,7 @@ impl DatePickerState {
             number_of_months: 1,
             disabled_matcher: None,
             _subscriptions,
+            first_day_of_week: Weekday::Sun,
         }
     }
 
@@ -142,6 +147,12 @@ impl DatePickerState {
     /// Set the number of months calendar view to display, default is 1.
     pub fn number_of_months(mut self, number_of_months: usize) -> Self {
         self.number_of_months = number_of_months;
+        self
+    }
+
+    /// Set the first day of the week.
+    pub fn first_day_of_week(mut self, day: Weekday) -> Self {
+        self.first_day_of_week = day;
         self
     }
 
@@ -187,7 +198,7 @@ impl DatePickerState {
     fn set_canlendar_disabled_matcher(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         let matcher = self.disabled_matcher.clone();
         self.calendar.update(cx, |state, _| {
-            state.disabled_matcher = matcher;
+            state.set_disabled_matcher_shared(matcher);
         });
     }
 
@@ -200,13 +211,6 @@ impl DatePickerState {
         self.open = false;
 
         cx.notify();
-    }
-
-    fn on_enter(&mut self, _: &Confirm, _: &mut Window, cx: &mut Context<Self>) {
-        if !self.open {
-            self.open = true;
-            cx.notify();
-        }
     }
 
     fn on_delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
@@ -277,6 +281,7 @@ pub struct DatePicker {
     number_of_months: usize,
     presets: Option<Vec<DateRangePreset>>,
     appearance: bool,
+    focus_ring_enabled: bool,
     disabled: bool,
 }
 
@@ -305,6 +310,17 @@ impl Disableable for DatePicker {
     }
 }
 
+impl crate::FocusableExt for DatePicker {
+    fn focus_ring(mut self, enabled: bool) -> Self {
+        self.focus_ring_enabled = enabled;
+        self
+    }
+
+    fn is_focus_ring_enabled(&self) -> bool {
+        self.focus_ring_enabled
+    }
+}
+
 impl Render for DatePickerState {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl gpui::IntoElement {
         Empty
@@ -321,9 +337,10 @@ impl DatePicker {
             placeholder: None,
             size: Size::default(),
             style: StyleRefinement::default(),
-            number_of_months: 2,
+            number_of_months: 1,
             presets: None,
             appearance: true,
+            focus_ring_enabled: true,
             disabled: false,
         }
     }
@@ -346,7 +363,7 @@ impl DatePicker {
         self
     }
 
-    /// Set number of months to display in the calendar, default is 2.
+    /// Set number of months to display in the calendar, default is 1.
     pub fn number_of_months(mut self, number_of_months: usize) -> Self {
         self.number_of_months = number_of_months;
         self
@@ -380,15 +397,22 @@ impl RenderOnce for DatePicker {
 
         let (bg, fg) = input_style(self.disabled, cx);
 
-        div()
-            .id(self.id.clone())
-            .key_context(CONTEXT)
-            .track_focus(&self.focus_handle(cx).tab_stop(true))
-            .on_action(window.listener_for(&self.state, DatePickerState::on_enter))
-            .on_action(window.listener_for(&self.state, DatePickerState::on_delete))
-            .when(state.open, |this| {
-                this.on_action(window.listener_for(&self.state, DatePickerState::on_escape))
+        let picker_state = self.state.clone();
+
+        BaseDatePicker::new(self.id, &state.focus_handle)
+            .open(state.open)
+            .disabled(self.disabled)
+            .on_open_change(move |open, window, cx| {
+                picker_state.update(cx, |state, cx| {
+                    if !open {
+                        state.focus_back_if_need(window, cx);
+                    }
+                    state.open = open;
+                    cx.notify();
+                });
             })
+            .key_context(CONTEXT)
+            .on_action(window.listener_for(&self.state, DatePickerState::on_delete))
             .flex_none()
             .w_full()
             .relative()
@@ -408,9 +432,14 @@ impl RenderOnce for DatePicker {
                             .border_1()
                             .border_color(cx.theme().input)
                             .rounded(cx.theme().radius)
-                            .when(is_focused, |this| this.focused_border(cx))
+                            .when(is_focused, |this| {
+                                this.border_1().border_color(cx.theme().ring)
+                            })
                     })
-                    .overflow_hidden()
+                    .when(
+                        is_focused && self.appearance && !self.disabled && self.focus_ring_enabled,
+                        |this| this.focus_ring_style(window, cx),
+                    )
                     .input_text_size(self.size)
                     .input_size(self.size)
                     .when(!state.open && !self.disabled, |this| {
@@ -421,6 +450,7 @@ impl RenderOnce for DatePicker {
                     .child(
                         h_flex()
                             .w_full()
+                            .overflow_hidden()
                             .items_center()
                             .justify_between()
                             .gap_1()
@@ -500,6 +530,7 @@ impl RenderOnce for DatePicker {
                                         .child(
                                             Calendar::new(&state.calendar)
                                                 .number_of_months(self.number_of_months)
+                                                .first_day_of_week(state.first_day_of_week)
                                                 .border_0()
                                                 .rounded_none()
                                                 .p_0()
@@ -508,7 +539,7 @@ impl RenderOnce for DatePicker {
                                 ),
                         ),
                     )
-                    .with_priority(2),
+                    .with_priority(gpui_base::POPUP_PRIORITY),
                 )
             })
     }

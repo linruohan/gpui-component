@@ -16,12 +16,14 @@ use gpui_component::{
     h_flex,
     highlighter::Language,
     input::{
-        DocumentRangeSemanticTokensProvider, Input, InputEvent, InputState, Rope, RopeExt, TabSize,
+        DocumentRangeSemanticTokensProvider, Editor, EditorState, InputEvent, Rope, RopeExt,
+        TabSize,
     },
     resizable::{h_resizable, resizable_panel},
     status_bar::StatusBar,
     text::{
-        MarkdownNode, MarkdownParseContext, MarkdownPlugin, TextViewStyle, markdown, markdown_ast,
+        MarkdownNode, MarkdownParseContext, MarkdownPlugin, SelectionFormat, TextViewStyle,
+        markdown, markdown_ast,
     },
     v_flex,
 };
@@ -1109,10 +1111,13 @@ impl DocumentRangeSemanticTokensProvider for MarkerHighlighter {
 }
 
 pub struct Example {
-    input_state: Entity<InputState>,
+    input_state: Entity<EditorState>,
     /// When `true`, tables wrap cell content to fit the width; when `false`
     /// (the default), tables keep cells on one line and scroll horizontally.
     table_wrap: bool,
+    /// Whether copying a selection yields the rendered text or its Markdown
+    /// source.
+    selection_format: SelectionFormat,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -1121,8 +1126,8 @@ const EXAMPLE: &str = include_str!("./fixtures/test.md");
 impl Example {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let input_state = cx.new(|cx| {
-            let mut input_state = InputState::new(window, cx)
-                .code_editor(Language::Markdown)
+            EditorState::new(window, cx)
+                .language(Language::Markdown)
                 .line_number(true)
                 .tab_size(TabSize {
                     tab_size: 2,
@@ -1130,13 +1135,14 @@ impl Example {
                 })
                 .searchable(true)
                 .placeholder("Enter your Markdown here...")
-                .default_value(EXAMPLE);
+                .default_value(EXAMPLE)
+        });
 
-            // Install the example range semantic tokens provider, alongside
-            // the other LSP providers. It highlights TODO/FIXME/… markers.
-            input_state.lsp.semantic_tokens_provider = Some(Rc::new(MarkerHighlighter));
-
-            input_state
+        // Install the example range semantic tokens provider, alongside the
+        // other LSP providers. It highlights TODO/FIXME/… markers.
+        input_state.update(cx, |state, cx| {
+            state.lsp_mut().semantic_tokens_provider = Some(Rc::new(MarkerHighlighter));
+            cx.notify();
         });
 
         // Focus the input on startup so that actions (e.g. Open) can bubble
@@ -1152,6 +1158,7 @@ impl Example {
             input_state,
             // Default to horizontal scrolling for tables.
             table_wrap: false,
+            selection_format: SelectionFormat::Plain,
             _subscriptions,
         }
     }
@@ -1219,17 +1226,16 @@ impl Render for Example {
                                             .font_family(cx.theme().mono_font_family.clone())
                                             .text_size(cx.theme().mono_font_size)
                                             .child(
-                                                Input::new(&self.input_state)
-                                                    .h_full()
+                                                Editor::new(&self.input_state)
+                                                    .h(relative(1.))
                                                     .p_0()
-                                                    .border_0()
-                                                    .focus_bordered(false),
+                                                    .border_0(),
                                             ),
                                     ),
                                 )
                                 .child(
                                     resizable_panel().child(
-                                        markdown(self.input_state.read(cx).value().clone())
+                                        markdown(self.input_state.read(cx).value())
                                             .code_block_actions(|code_block, _window, _cx| {
                                                 let code = code_block.code();
                                                 let lang = code_block.lang();
@@ -1275,32 +1281,58 @@ impl Render for Example {
                                             ))
                                             .plugin(UserCardPlugin::new())
                                             .plugin(MathPlugin::new())
+                                            .on_link_click(|url, event, _window, cx| {
+                                                println!(
+                                                    "Markdown link clicked: {url} ({event:?})"
+                                                );
+                                                if !event.is_right_click() {
+                                                    cx.open_url(url);
+                                                }
+                                            })
                                             // Tables scroll horizontally by default; the
                                             // status bar toggle switches to wrapping.
                                             .style(self.text_view_style())
                                             .flex_none()
                                             .p_5()
                                             .scrollable(true)
-                                            .selectable(true),
+                                            .selectable(true)
+                                            .selection_format(self.selection_format),
                                     ),
                                 ),
                         ),
                     )
                     .child(
-                        StatusBar::new().right(
-                            Button::new("table-wrap")
-                                .ghost()
-                                .xsmall()
-                                .label(if self.table_wrap {
-                                    "Table: Wrap"
-                                } else {
-                                    "Table: Scroll"
-                                })
-                                .on_click(cx.listener(|this, _, _, cx| {
-                                    this.table_wrap = !this.table_wrap;
-                                    cx.notify();
-                                })),
-                        ),
+                        StatusBar::new()
+                            .right(
+                                Button::new("selection-format")
+                                    .ghost()
+                                    .xsmall()
+                                    .label(match self.selection_format {
+                                        SelectionFormat::Plain => "Selection: Plain",
+                                        SelectionFormat::Source => "Selection: Source",
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.selection_format = match this.selection_format {
+                                            SelectionFormat::Plain => SelectionFormat::Source,
+                                            SelectionFormat::Source => SelectionFormat::Plain,
+                                        };
+                                        cx.notify();
+                                    })),
+                            )
+                            .right(
+                                Button::new("table-wrap")
+                                    .ghost()
+                                    .xsmall()
+                                    .label(if self.table_wrap {
+                                        "Table: Wrap"
+                                    } else {
+                                        "Table: Scroll"
+                                    })
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.table_wrap = !this.table_wrap;
+                                        cx.notify();
+                                    })),
+                            ),
                     ),
             )
     }
