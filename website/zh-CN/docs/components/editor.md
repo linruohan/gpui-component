@@ -17,7 +17,8 @@ use gpui_component::input::{Editor, EditorState, TabSize};
 
 ```rust
 let editor = cx.new(|cx| {
-    EditorState::new("rust", window, cx)
+    EditorState::new(window, cx)
+        .language("rust")
         .line_number(true)
         .folding(true)
         .tab_size(TabSize {
@@ -30,13 +31,14 @@ let editor = cx.new(|cx| {
 Editor::new(&editor).h(px(320.))
 ```
 
-`EditorState::new` 的第一个参数指定语法高亮语言。应用需要启用对应的 Cargo feature，例如 `tree-sitter-rust` 或 `tree-sitter-markdown`；也可以使用 `tree-sitter-languages` 包含全部内置语法。
+使用 `.language()` 指定语法高亮语言。应用需要启用对应的 Cargo feature，例如 `tree-sitter-rust` 或 `tree-sitter-markdown`；也可以使用 `tree-sitter-languages` 包含全部内置语法。
 
 ## 编辑器选项
 
 ```rust
 let editor = cx.new(|cx| {
-    EditorState::new("json", window, cx)
+    EditorState::new(window, cx)
+        .language("json")
         .line_number(true)
         .folding(true)
         .show_whitespaces(true)
@@ -65,6 +67,22 @@ editor.update(cx, |state, cx| {
 ```
 
 `EditorState` 会发出 `InputEvent::Change`、`Focus` 和 `Blur` 等事件。
+
+## 字体
+
+Editor 默认使用主题中的等宽字体 —— `mono_font_family` 和 `mono_font_size`，行高为字号的
+1.5 倍。这只是默认值：在 Editor 上设置的文本样式会覆盖它，gutter 和行高都跟随字号变化。
+
+```rust
+Editor::new(&editor).text_sm()
+
+Editor::new(&editor)
+    .font_family("JetBrains Mono")
+    .text_size(px(15.))
+```
+
+这些就是所有元素都有的 [`Styled`](https://docs.rs/gpui/latest/gpui/trait.Styled.html)
+方法，`font_weight`、`line_height` 用法相同。
 
 ## 外观
 

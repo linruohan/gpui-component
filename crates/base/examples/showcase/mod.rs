@@ -8,19 +8,25 @@ use gpui::{
 };
 #[cfg(not(target_family = "wasm"))]
 use gpui::{KeyBinding, WindowBounds};
+use gpui_base::ResizeHandleContext;
+use gpui_base::dock::{
+    DockArea, DockAreaRenderer, DockContext, DockLayout, DockPlacement, DropIndicator, NodeId,
+    Panel, PanelEvent, PanelView, TabGroupContext, TabGroupRenderer, TileContext, TilesRenderer,
+};
 use gpui_base::input::InputEditorStyle;
 use gpui_base::input::{EditorState, InputState, TextareaState};
 use gpui_base::slider::SliderState;
 use gpui_base::{
     Accordion, AccordionHeader, AccordionItem, AccordionPanel, AccordionTrigger, AlertDialog,
     AlertDialogAction, AlertDialogBackdrop, AlertDialogCancel, AlertDialogDescription,
-    AlertDialogPopup, AlertDialogTitle, Avatar, AvatarFallback, Button, Calendar, CalendarItemKind,
-    CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible, ColorPicker,
-    ColorPickerState, ColorSwatch, Combobox, DatePicker, Dialog, DialogBackdrop, DialogDescription,
-    DialogPopup, DialogTitle, Editor, HoverCard, Input, InputBase, OtpState, Popup, Scrollbar,
-    ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb, SliderTrack, Switch,
-    SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-    Tabs, Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
+    AlertDialogPopup, AlertDialogTitle, AutoScroll, Avatar, AvatarFallback, Button, Calendar,
+    CalendarItemKind, CalendarState, Checkbox, CheckboxIndicator, CheckboxState, Collapsible,
+    ColorPicker, ColorPickerState, ColorSwatch, Combobox, DatePicker, Dialog, DialogBackdrop,
+    DialogDescription, DialogPopup, DialogTitle, Editor, HoverCard, Input, InputBase, OtpState,
+    Popup, Scrollbar, ScrollbarMode, Select, Sheet, Slider, SliderIndicator, SliderThumb,
+    SliderTrack, Switch, SwitchThumb, SwitchTrack, Tab, Table, TableBody, TableCell, TableHead,
+    TableHeader, TableRow, Tabs, TextSelectionEvent, TextSelectionHandle, TextSelectionLayer,
+    Textarea, Toast, ToastTransitionStatus, Toggle, ToggleGroup, Tooltip, Tree, TreeItem,
     TreeState, VirtualListScrollHandle, v_virtual_list,
 };
 #[cfg(target_family = "wasm")]
@@ -77,6 +83,7 @@ pub const COMPONENTS: &[&str] = &[
     "combobox",
     "date-picker",
     "dialog",
+    "dock",
     "editor",
     "hover-card",
     "input",
@@ -97,6 +104,7 @@ pub const COMPONENTS: &[&str] = &[
     "switch",
     "table",
     "tabs",
+    "text-selection",
     "textarea",
     "toast",
     "toggle",
@@ -142,6 +150,14 @@ pub struct BaseShowcase {
     scroll: ScrollHandle,
     example_scroll: ScrollHandle,
     virtual_scroll: VirtualListScrollHandle,
+    dock: gpui::Entity<DockArea>,
+    text_selection_handles: [TextSelectionHandle; 4],
+    text_selection_scroll: ScrollHandle,
+    text_selection_auto_scroll: AutoScroll,
+    text_selection_active: bool,
+    text_selection_text: String,
+    #[cfg(test)]
+    text_selection_footer_bounds: Rc<std::cell::RefCell<Option<gpui::Bounds<gpui::Pixels>>>>,
 }
 
 impl BaseShowcase {
@@ -239,6 +255,38 @@ impl BaseShowcase {
             cx.new(|cx| ColorPickerState::new(window, cx).default_value(rgb(0x2563eb)));
         cx.observe(&color_picker, |_, _, cx| cx.notify()).detach();
 
+        let text_selection_handles = [
+            TextSelectionHandle::new("", cx),
+            TextSelectionHandle::new("", cx),
+            TextSelectionHandle::new("", cx),
+            TextSelectionHandle::new("", cx),
+        ];
+        let text_selection_scroll = ScrollHandle::new();
+        for selection in &text_selection_handles {
+            selection.refresh_window_on_change(window, cx).detach();
+            let view = cx.entity().downgrade();
+            selection
+                .subscribe(
+                    move |event, cx| {
+                        let TextSelectionEvent::AutoScroll(delta) = event else {
+                            return;
+                        };
+                        let delta = *delta;
+                        _ = view.update(cx, |this, cx| {
+                            this.text_selection_auto_scroll
+                                .set(delta, cx, |delta, this, cx| {
+                                    let offset = this.text_selection_scroll.offset();
+                                    this.text_selection_scroll
+                                        .set_offset(gpui::point(offset.x, offset.y - delta));
+                                    cx.notify();
+                                });
+                        });
+                    },
+                    cx,
+                )
+                .detach();
+        }
+
         Self {
             navigation_enabled: component == "overview",
             component,
@@ -290,6 +338,14 @@ impl BaseShowcase {
             scroll: ScrollHandle::new(),
             example_scroll: ScrollHandle::new(),
             virtual_scroll: VirtualListScrollHandle::new(),
+            dock: components::build_dock(window, cx),
+            text_selection_handles,
+            text_selection_scroll,
+            text_selection_auto_scroll: AutoScroll::default(),
+            text_selection_active: false,
+            text_selection_text: String::new(),
+            #[cfg(test)]
+            text_selection_footer_bounds: Rc::new(std::cell::RefCell::new(None)),
         }
     }
 
@@ -378,16 +434,20 @@ impl Render for BaseShowcase {
             "switch" => self.switch(cx).into_any_element(),
             "table" => self.table().into_any_element(),
             "tabs" => self.tabs(cx).into_any_element(),
+            "text-selection" => self.text_selection(window, cx).into_any_element(),
             "textarea" => self.textarea().into_any_element(),
             "toast" => self.toast(cx).into_any_element(),
             "toggle" => self.toggle(cx).into_any_element(),
             "toggle-group" => self.toggle_group(cx).into_any_element(),
             "tooltip" => self.tooltip(cx).into_any_element(),
             "tree" => self.tree().into_any_element(),
+            "dock" => self.dock(cx).into_any_element(),
             "virtual-list" => self.virtual_list(cx).into_any_element(),
             _ => self.overview(cx).into_any_element(),
         };
         let show_back = self.navigation_enabled && self.component != "overview";
+        // Surfaces rather than parts: these take the whole viewport.
+        let fills_viewport = matches!(self.component.as_str(), "dock");
         let entity = cx.entity().downgrade();
         div()
             .size_full()
@@ -397,6 +457,7 @@ impl Render for BaseShowcase {
             .text_color(rgb(0x171717))
             .text_xs()
             .font_family("Inter Variable")
+            .child(TextSelectionLayer)
             .when(show_back, |this| {
                 this.child(
                     div()
@@ -438,10 +499,23 @@ impl Render for BaseShowcase {
                             .min_h_full()
                             .w_full()
                             .flex()
-                            .items_center()
-                            .justify_center()
+                            // Most examples are small parts, centered in the
+                            // viewport. A few are whole surfaces that have to
+                            // fill it instead: centering them inside a
+                            // `flex_none` box leaves a percentage size with
+                            // nothing to resolve against, and it collapses.
+                            .when(!fills_viewport, |this| {
+                                this.items_center().justify_center()
+                            })
                             .p_4()
-                            .child(div().flex_none().child(content)),
+                            .child(
+                                div()
+                                    .map(|this| match fills_viewport {
+                                        true => this.flex_1().size_full().min_h(px(420.)),
+                                        false => this.flex_none(),
+                                    })
+                                    .child(content),
+                            ),
                     ),
             )
     }

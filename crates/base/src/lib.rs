@@ -21,6 +21,7 @@ mod combobox;
 pub mod component_traits;
 mod date_picker;
 mod dialog;
+pub mod dock;
 mod element_ext;
 mod event;
 mod focus_trap;
@@ -55,6 +56,8 @@ mod styled;
 mod switch;
 mod table;
 mod tabs;
+mod text_boundary;
+mod text_selection;
 mod theme;
 pub mod theme_tokens;
 mod toast;
@@ -95,7 +98,7 @@ pub use focus_trap::FocusTrapElement;
 #[doc(hidden)]
 pub use focus_trap::active_focus_trap;
 pub use geometry::*;
-pub use global_state::GlobalState;
+pub use global_state::{DeferredPopover, GlobalState};
 pub use history::{History, HistoryItem};
 pub use hover_card::{HoverCard, HoverCardState};
 pub use index_path::IndexPath;
@@ -124,12 +127,12 @@ pub use radio_group::RadioGroup;
 #[doc(hidden)]
 pub use resizable::{PANEL_MIN_SIZE, resize_handle};
 pub use resizable::{
-    ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, h_resizable,
-    resizable_panel, v_resizable,
+    ResizablePanel, ResizablePanelEvent, ResizablePanelGroup, ResizableState, ResizeHandleContext,
+    ResizeHandleRenderer, h_resizable, resizable_panel, v_resizable,
 };
 pub use scrollbar::{
-    Scrollbar, ScrollbarAxis, ScrollbarHandle, ScrollbarMode, ScrollbarStyles, ScrollbarThumbStyle,
-    ScrollbarTrackStyle,
+    Scrollbar, ScrollbarAxis, ScrollbarEntrance, ScrollbarHandle, ScrollbarMode, ScrollbarMotion,
+    ScrollbarStyles, ScrollbarThumbStyle, ScrollbarTrackStyle,
 };
 pub use select::Select;
 pub use sheet::Sheet;
@@ -143,6 +146,12 @@ pub use switch::{
 };
 pub use table::{Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow};
 pub use tabs::{Tab, TabStyles, Tabs};
+pub use text_selection::{
+    TextSelection, TextSelectionContentKey, TextSelectionCoverage, TextSelectionEndpoint,
+    TextSelectionEvent, TextSelectionHandle, TextSelectionLayer, TextSelectionProjection,
+    TextSelectionRegistration, TextSelectionRun, TextSelectionScopeId, TextSelectionSnapshot,
+    TextSelectionWindowPoints,
+};
 pub use theme::{ResizableTheme, ScrollbarTheme, Theme};
 pub use theme_tokens::{
     ColorTokens, RadiusTokens, SemanticThemeTokens, ShadowTokens, SpacingTokens, TextStyleToken,

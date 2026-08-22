@@ -8,6 +8,7 @@ index.scip
 /.idea
 node_modules/
 .claude/worktrees/
+/.superpowers/
 docs/superpowers/
 
 # WASM build artifacts

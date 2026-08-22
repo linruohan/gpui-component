@@ -6,6 +6,30 @@
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 
+.architecture-dark {
+  display: none;
+}
+
+.alignment-dark {
+  display: none;
+}
+
+html.dark .architecture-light {
+  display: none;
+}
+
+html.dark .architecture-dark {
+  display: block;
+}
+
+html.dark .alignment-light {
+  display: none;
+}
+
+html.dark .alignment-dark {
+  display: block;
+}
+
 :root {
   --radius-control: 0.375rem;
   --radius-card: 0.625rem;
@@ -783,36 +807,48 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   table {
     display: table;
     width: 100%;
-    border-collapse: collapse;
-    font-size: 0.84rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+    background: var(--background);
+    font-size: 0.82rem;
   }
 
   tr {
     border-top: 0;
-    border-bottom: 1px solid var(--border);
   }
 
   /* table.head.background from the default theme. */
   thead tr {
-    background: var(--sidebar);
+    background: color-mix(in srgb, var(--secondary) 10%, transparent);
   }
 
   th {
     color: var(--vp-c-text-2);
-    font: 620 0.7rem/1.4 var(--vp-font-family-mono);
+    font: 620 0.67rem/1.35 var(--vp-font-family-mono);
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
   th,
   td {
-    padding: 0.7rem 0.75rem;
+    padding: 0.52rem 0.65rem;
     border: 0;
+    border-bottom: 1px solid var(--border);
+    line-height: 1.5;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: 0;
   }
 
   th:first-child,
   td:first-child {
-    padding-left: 0.9rem;
+    padding-left: 0.75rem;
   }
 
   blockquote {
@@ -827,6 +863,12 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
     border-radius: 0.25rem;
     background: var(--secondary);
     font-size: 0.84em;
+    /* The border makes this box visible, so its height has to stay inside the
+       line it sits on. At the body's 1.7 line-height the default padding pushes
+       the box past the leading, and consecutive lines — table cells most of
+       all — overlap. */
+    line-height: 1.2;
+    padding: 0.1em 0.35em;
   }
 
   div[class*="language-"] {
@@ -1167,7 +1209,7 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
 /* The base showcase is a deliberately unstyled demo with hard-coded light
    colours, so its frame stays light in dark mode too. */
 .component-example--base iframe {
-  height: 420px;
+  height: 600px;
   color-scheme: light;
   @apply bg-white;
 }
@@ -1182,7 +1224,7 @@ html[lang^="ja"] :is(h1, h2, h3, h4) {
   }
 
   .component-example--base iframe {
-    height: 380px;
+    height: min(520px, 75vh);
   }
 }
 
