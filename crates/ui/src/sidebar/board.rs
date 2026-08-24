@@ -1,10 +1,10 @@
 use crate::{
-    h_flex, label::Label, v_flex, ActiveTheme as _, Collapsible, Colorize, Icon, IconName, Theme,
+    ActiveTheme as _, Collapsible, Colorize, Icon, IconName, Theme, h_flex, label::Label, v_flex,
 };
 use gpui::{
-    div, prelude::FluentBuilder as _, px, relative, AnyElement, App, ClickEvent, ElementId, Hsla,
-    InteractiveElement as _, IntoElement, Length, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, Window,
+    AnyElement, App, ClickEvent, ElementId, Hsla, InteractiveElement as _, IntoElement, Length,
+    ParentElement as _, RenderOnce, SharedString, StatefulInteractiveElement as _, Styled as _,
+    Window, div, prelude::FluentBuilder as _, px, relative,
 };
 use std::rc::Rc;
 
