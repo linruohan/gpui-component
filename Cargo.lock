@@ -10369,15 +10369,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tyme4rs"
-version = "1.5.0"
-source = "git+https://github.com/linruohan/tyme4rs.git#12fc5a797d57e680e1fb3cc8b33a50ba1f9b1e13"
-dependencies = [
- "lazy_static",
- "regex",
-]
-
-[[package]]
 name = "tungstenite"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10395,6 +10386,15 @@ dependencies = [
  "thiserror 2.0.18",
  "url",
  "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "tyme4rs"
+version = "1.5.0"
+source = "git+https://github.com/linruohan/tyme4rs.git#12fc5a797d57e680e1fb3cc8b33a50ba1f9b1e13"
+dependencies = [
+ "lazy_static",
+ "regex",
 ]
 
 [[package]]
