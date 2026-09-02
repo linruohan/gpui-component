@@ -33,6 +33,10 @@ function wasmExamplesDevServer() {
           res.end("WASM example is not built. Run its Makefile build target first.");
           return;
         }
+        // The Rust example is rebuilt before the VitePress dev server starts.
+        // Never let a surviving iframe reuse an older index that points at an
+        // obsolete hashed WASM asset after that restart.
+        res.setHeader("Cache-Control", "no-store");
         res.setHeader("Content-Type", contentTypes[extname(file)] ?? "application/octet-stream");
         createReadStream(file).pipe(res);
       });
@@ -122,11 +126,13 @@ const shellSidebar = createSidebar("/shell/", "GPUI Shell", "Introduction");
 const baseSidebar = createSidebar("/base/", "GPUI Base");
 const zhSidebar = createSidebar("/zh-CN/docs/", "文档");
 const zhShellSidebar = createSidebar("/zh-CN/shell/", "GPUI Shell", "简介");
+const zhBaseSidebar = createSidebar("/zh-CN/base/", "GPUI Base");
 
 function createFooter(prefix = "", locale: "en" | "zh" = "en") {
   const designGuidesText = locale === "zh" ? "设计指南" : "Design Guides";
   const codingGuidesText = locale === "zh" ? "编码指南" : "Coding Guides";
   const contributorsText = locale === "zh" ? "贡献者" : "Contributors";
+  const appsText = locale === "zh" ? "应用案例" : "App Stories";
   const skillsText = "Skills";
   const reportBugText = locale === "zh" ? "报告问题" : "Report Bug";
   const discussionText = locale === "zh" ? "讨论" : "Discussion";
@@ -146,6 +152,8 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
       |
       <a href="/gpui-component${prefix}/docs/coding-guides">${codingGuidesText}</a>
       |
+      <a href="/gpui-component${prefix}/apps">${appsText}</a>
+      |
       <a href="/gpui-component${prefix}/contributors">${contributorsText}</a>
       |
       <a href="/gpui-component${prefix}/skills" target="_blank">${skillsText}</a>
@@ -164,6 +172,7 @@ function createFooter(prefix = "", locale: "en" | "zh" = "en") {
 
 function createNav(prefix = "", locale: "en" | "zh" = "en") {
   const componentsText = locale === "zh" ? "组件" : "Components";
+  const appsText = locale === "zh" ? "应用案例" : "App Stories";
   const resourcesText = locale === "zh" ? "资源" : "Resources";
   const contributorsText = locale === "zh" ? "贡献者" : "Contributors";
   const releasesText = locale === "zh" ? "版本发布" : "Releases";
@@ -175,9 +184,10 @@ function createNav(prefix = "", locale: "en" | "zh" = "en") {
     // Shell precedes Base: it is the newest layer and the one a reader is
     // least likely to already know about.
     { text: "Shell", link: `${prefix}/shell/` },
-    // The gpui-base docs are English-only, so both locales point at the same
-    // pages; the section keeps its full "GPUI Base" name in the sidebar.
-    { text: "Base", link: "/base/" },
+    { text: "Base", link: `${prefix}/base/` },
+    // Proof the library ships real software, so it sits in the bar itself
+    // rather than inside the Resources menu.
+    { text: appsText, link: `${prefix}/apps` },
     {
       text: resourcesText,
       items: [
@@ -312,6 +322,7 @@ const config: UserConfig = {
         sidebar: {
           ...zhSidebar,
           ...zhShellSidebar,
+          ...zhBaseSidebar,
         },
         footer: createFooter("/zh-CN", "zh"),
         langMenuLabel: "语言",
@@ -329,7 +340,9 @@ const config: UserConfig = {
   },
   markdown: {
     math: true,
-    defaultHighlightLang: "rs",
+    languages: ["rust"],
+    languageAlias: { rs: "rust" },
+    defaultHighlightLang: "rust",
     theme: {
       light: lightTheme,
       dark: darkTheme,

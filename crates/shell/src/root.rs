@@ -18,8 +18,8 @@ use gpui::{
     Anchor, AnyElement, AnyView, App, AppContext as _, ClickEvent, ClipboardItem, Context,
     ElementId, Entity, FocusHandle, Global, Hsla, InteractiveElement as _, IntoElement, KeyBinding,
     MouseButton, MouseDownEvent, ParentElement as _, Render, SharedString,
-    StatefulInteractiveElement as _, Styled as _, WeakFocusHandle, Window, actions, deferred, div,
-    hsla, prelude::FluentBuilder as _, px,
+    StatefulInteractiveElement as _, StyleRefinement, Styled as _, WeakFocusHandle, Window,
+    actions, deferred, div, hsla, prelude::FluentBuilder as _, px,
 };
 use gpui_base::{
     ColorTokens, Dialog, POPUP_PRIORITY, Placement, RadiusTokens, Sheet, SpacingTokens,
@@ -476,10 +476,7 @@ impl ShellRoot {
         cx.spawn_in(window, async move |this, cx| {
             loop {
                 cx.background_executor().timer(TOAST_TICK).await;
-                if this
-                    .update_in(cx, |this, window, cx| this.advance_toasts(window, cx))
-                    .is_err()
-                {
+                if this.update(cx, |this, cx| this.advance_toasts(cx)).is_err() {
                     break;
                 }
             }
@@ -487,11 +484,10 @@ impl ShellRoot {
         .detach();
     }
 
-    fn advance_toasts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        // Timers pause while the user is reading the stack, and while the
-        // window is in the background — a toast that expired unseen behind
-        // another window was never delivered.
-        let paused = self.toast_state.is_expanded() || !window.is_window_active();
+    fn advance_toasts(&mut self, cx: &mut Context<Self>) {
+        // Timers pause while the user is reading the stack, not while the window
+        // is inactive: a visible side-by-side window would hold its toasts forever.
+        let paused = self.toast_state.is_expanded();
         if self
             .toasts
             .advance(cx.background_executor().now(), paused)
@@ -531,6 +527,7 @@ impl ShellRoot {
             .map(|(index, dialog)| {
                 let topmost = index == topmost_index;
                 let root = root.clone();
+                rebuild_script_overlay(&dialog.content, cx);
 
                 Dialog::new(cx)
                     .focus_handle(dialog.focus_handle.clone())
@@ -582,6 +579,7 @@ impl ShellRoot {
         let sheet = self.sheet.as_ref()?;
         let root = cx.entity();
         let placement = sheet.placement;
+        rebuild_script_overlay(&sheet.content, cx);
 
         Some(
             Sheet::new(cx)
@@ -734,6 +732,20 @@ impl Render for ShellRoot {
 
         div()
             .id("shell-root")
+            // The window's base text size, from the theme rather than from
+            // GPUI's default rem.
+            //
+            // Everything this root draws itself -- toasts, the sheet, the
+            // dialog scrim's chrome -- states no size of its own and inherits
+            // this one. Without it that chrome sat at GPUI's 16px default
+            // while the components an application builds set their own sizes,
+            // so a dense application drawn at 12px got 16px notifications over
+            // it. `md` is the base by the library's own convention: it is what
+            // `gpui_component::Theme` already takes its `font_size` from.
+            //
+            // The default `md` is that same 16px, so a theme that says nothing
+            // about type is drawn exactly as it was before this existed.
+            .text_size(tokens.typography.md.size)
             .key_context(CONTEXT)
             .on_action(cx.listener(Self::on_action_tab))
             .on_action(cx.listener(Self::on_action_tab_prev))
@@ -755,7 +767,11 @@ impl Render for ShellRoot {
             .text_color(colors.foreground)
             // Painted back to front; see the stacking order on `ShellRoot`.
             .child(TextSelectionLayer)
-            .child(self.content.clone())
+            .child(
+                self.content
+                    .clone()
+                    .cached(StyleRefinement::default().size_full()),
+            )
             .children(self.sheet_layer(&colors, &spacing, cx))
             .children(self.dialog_layer(&colors, &radius, &spacing, cx))
             .child(self.toast_layer(&colors, &radius, &spacing, cx))
@@ -1002,6 +1018,29 @@ fn install_key_bindings(cx: &mut App) {
 /// test — there is nothing to check. A `Render` or `Layout` scope is a script
 /// bug: it is reported and ignored rather than panicked on, because a script
 /// error must not take the window down (`docs/gpui-shell.md` §5.8).
+/// Rebuilds a script overlay's description before it draws.
+///
+/// An overlay's content is a function, and what it closes over is somebody
+/// else's state -- that is the contract `open_dialog` and `open_sheet`
+/// document, and the only one they can have: neither answers a view handle, so
+/// there is nothing for a script to notify when the state behind the closure
+/// moves. Without this, an overlay materializes the description it was built
+/// with, once, for as long as it is open: a dialog that looks up what someone
+/// typed shows the answer to nothing.
+///
+/// So the root rebuilds it whenever the root itself draws, which is what
+/// `window.refresh()` -- the call whose whole purpose is "there is no view to
+/// notify" -- now reaches. Marking it dirty schedules no frame of its own: the
+/// overlay is about to render as part of this one, and it renders from the
+/// script rather than from the cache.
+///
+/// A non-script overlay owns its own state and is left alone.
+fn rebuild_script_overlay(content: &AnyView, cx: &mut App) {
+    if let Ok(view) = content.clone().downcast::<ScriptView>() {
+        view.update(cx, |view, _| view.invalidate());
+    }
+}
+
 fn overlay_mutation_allowed(operation: &str) -> bool {
     match scope::current_phase() {
         None => true,
@@ -1370,8 +1409,6 @@ mod tests {
     #[gpui::test]
     fn a_toast_retires_itself_when_its_timeout_elapses(cx: &mut TestAppContext) {
         let (root, cx) = shell_root(cx);
-        // Timeouts only run while the window is active, so the test has to say
-        // that it is.
         cx.update(|window, _| window.activate_window());
         cx.run_until_parked();
 
@@ -1389,10 +1426,11 @@ mod tests {
     }
 
     #[gpui::test]
-    fn a_toast_does_not_expire_while_the_window_is_in_the_background(cx: &mut TestAppContext) {
+    fn a_toast_expires_while_the_window_is_in_the_background(cx: &mut TestAppContext) {
         let (root, cx) = shell_root(cx);
 
         root.update_in(cx, |root, window, cx| {
+            assert!(!window.is_window_active());
             root.push_toast(
                 ToastRequest::new("Saved").with_timeout(Some(Duration::from_secs(1))),
                 window,
@@ -1402,7 +1440,7 @@ mod tests {
 
         cx.executor().advance_clock(Duration::from_secs(10));
         cx.run_until_parked();
-        assert_eq!(root.read_with(cx, |root, _| root.toast_count()), 1);
+        assert_eq!(root.read_with(cx, |root, _| root.toast_count()), 0);
     }
 
     #[gpui::test]
