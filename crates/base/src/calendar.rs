@@ -177,6 +177,7 @@ pub struct CalendarState {
     today: NaiveDate,
     number_of_months: usize,
     disabled_matcher: Option<Rc<Matcher>>,
+    first_day_of_week: Weekday,
 }
 
 impl CalendarState {
@@ -193,6 +194,7 @@ impl CalendarState {
             today,
             number_of_months: 1,
             disabled_matcher: None,
+            first_day_of_week: Weekday::Mon,
         }
         .year_range((today.year() - 50, today.year() + 50))
     }
@@ -314,10 +316,16 @@ impl CalendarState {
                 days_in_month(
                     self.current_year,
                     self.current_month as u32 + n as u32,
-                    Weekday::Sun,
+                    self.first_day_of_week,
                 )
             })
             .collect()
+    }
+    pub fn set_first_day_of_week(&mut self, day: Weekday) {
+        self.first_day_of_week = day;
+    }
+    pub fn first_day_of_week(&self) -> Weekday {
+        self.first_day_of_week
     }
     pub fn has_prev_year_page(&self) -> bool {
         self.year_page > 0
@@ -420,6 +428,8 @@ pub struct CalendarItemState {
     muted: bool,
     disabled: bool,
     today: bool,
+    /// The concrete date represented by this item, set only on Day items.
+    date: Option<NaiveDate>,
 }
 
 impl CalendarItemState {
@@ -432,6 +442,7 @@ impl CalendarItemState {
             muted: false,
             disabled: false,
             today: false,
+            date: None,
         }
     }
 
@@ -463,6 +474,12 @@ impl CalendarItemState {
         self
     }
 
+    /// Associate this item with a specific calendar date (used by Day items).
+    pub fn with_date(mut self, date: Option<NaiveDate>) -> Self {
+        self.date = date;
+        self
+    }
+
     pub fn kind(&self) -> CalendarItemKind {
         self.kind
     }
@@ -485,6 +502,11 @@ impl CalendarItemState {
 
     pub fn is_today(&self) -> bool {
         self.today
+    }
+
+    /// Returns the concrete date for this item, set only on Day items.
+    pub fn date(&self) -> Option<NaiveDate> {
+        self.date
     }
 }
 
@@ -574,7 +596,7 @@ impl Calendar {
             id: id.into(),
             state: state.clone(),
             number_of_months: 1,
-            first_day_of_week: Weekday::Sun,
+            first_day_of_week: Weekday::Mon,
             style: StyleRefinement::default(),
             item: Rc::new(|item, _, _, _| item.into_any_element()),
             label: Rc::new(|kind, value| match kind {
@@ -634,8 +656,11 @@ impl Styled for Calendar {
 impl RenderOnce for Calendar {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let count = self.number_of_months;
-        self.state
-            .update(cx, |s, cx| s.set_number_of_months(count, window, cx));
+        let first_day = self.first_day_of_week;
+        self.state.update(cx, |s, cx| {
+            s.set_number_of_months(count, window, cx);
+            s.set_first_day_of_week(first_day);
+        });
         let view = self.state.read(cx).view();
         let mut header = h_flex().items_center().justify_between().child({
             let st = CalendarItemState::new(CalendarItemKind::Previous).disabled(
@@ -768,6 +793,7 @@ impl RenderOnce for Calendar {
                                 .muted(date.month() != m || disabled)
                                 .disabled(disabled)
                                 .today(date == s.today())
+                                .with_date(Some(date))
                         };
                         let mut item =
                             CalendarItem::new(format!("calendar-{date}-{offset}-{week_index}"), st)

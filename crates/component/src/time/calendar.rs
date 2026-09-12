@@ -1,11 +1,14 @@
-use chrono::Weekday;
+use chrono::{Datelike, Weekday};
 use gpui::{
     App, ElementId, Entity, InteractiveElement, IntoElement, ParentElement, RenderOnce,
-    SharedString, StyleRefinement, Styled, Window, prelude::FluentBuilder as _, px,
+    SharedString, StyleRefinement, Styled, TextAlign, Window, blue, div, green,
+    prelude::FluentBuilder as _, px, red,
 };
 use rust_i18n::t;
 
+use crate::time::utils::get_holiday_by_tyme4rs;
 use crate::{ActiveTheme, Icon, IconName, Sizable, Size, StyledExt as _};
+use crate::{h_flex, v_flex};
 
 use gpui_base::{Calendar as BaseCalendar, CalendarItemKind};
 pub use gpui_base::{CalendarEvent, CalendarState, Date, Matcher};
@@ -52,7 +55,7 @@ impl Calendar {
             state: state.clone(),
             style: StyleRefinement::default(),
             number_of_months: 1,
-            first_day_of_week: Weekday::Sun,
+            first_day_of_week: Weekday::Mon,
         }
     }
     pub fn number_of_months(mut self, count: usize) -> Self {
@@ -108,6 +111,63 @@ impl RenderOnce for Calendar {
                     CalendarItemKind::Next => item
                         .clear_children()
                         .child(Icon::new(IconName::ChevronRight).size_4()),
+                    CalendarItemKind::Day => {
+                        if let Some(date) = state.date() {
+                            // get_holiday_by_tyme4rs returns "{day} {name} [{休|班}]"
+                            let label_str = get_holiday_by_tyme4rs(date);
+                            let holiday_parts: Vec<&str> = label_str.split(' ').collect();
+                            let day = holiday_parts[0].to_string();
+                            let holiday = holiday_parts.get(1).unwrap_or(&"").to_string();
+                            let flag = holiday_parts.get(2).unwrap_or(&"").to_string();
+
+                            let jieqi_list: &[&str] = &[
+                                "冬至", "小寒", "大寒", "立春", "雨水", "惊蛰",
+                                "春分", "清明", "谷雨", "立夏", "小满", "芒种",
+                                "夏至", "小暑", "大暑", "立秋", "处暑", "白露",
+                                "秋分", "寒露", "霜降", "立冬", "小雪", "大雪",
+                            ];
+                            let is_jieqi = jieqi_list.contains(&holiday.as_str());
+
+                            item.clear_children().child(
+                                v_flex()
+                                    .text_align(TextAlign::Center)
+                                    .child(
+                                        h_flex()
+                                            .items_start()
+                                            .justify_around()
+                                            .gap_1()
+                                            .child(div().left(px(3.)).child(day))
+                                            .child(
+                                                div()
+                                                    .top(px(0.))
+                                                    .right(px(0.))
+                                                    .text_size(px(9.))
+                                                    .text_color(green())
+                                                    .child(flag.clone())
+                                                    .when(flag == "班", |this| {
+                                                        this.text_color(red())
+                                                    }),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .top(px(-5.))
+                                            .text_color(cx.theme().muted_foreground)
+                                            .text_size(px(9.))
+                                            .child(holiday.clone())
+                                            .when(is_jieqi, |this| this.text_color(blue()))
+                                            .when(holiday.len() > 6 && !is_jieqi, |this| {
+                                                this.text_color(green())
+                                            })
+                                            .when(flag == "班", |this| {
+                                                this.text_color(red())
+                                            }),
+                                    ),
+                            )
+                        } else {
+                            item
+                        }
+                    }
                     _ => item,
                 };
                 item.map(|this| match size {
