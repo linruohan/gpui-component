@@ -268,7 +268,7 @@ div()
 
 当前有一个必须明确的 ownership 边界：`Theme::spacing_tokens()` 投射固定默认 scale，`Theme::apply_semantic_tokens(...)` 不保存 custom spacing/elevation scale。应用如需自定义，必须自行持有 `SemanticThemeTokens`（或更窄的 design-system state）并提供给 component。不能把 custom spacing snapshot 写入 global theme 后，期待下次`cx.theme().semantic_tokens()` 仍返回它。
 
-直接修改 GPUI Component global theme 后调用 `Theme::sync_base(cx)`，让 Base 拥有的 scrollbar 与 resize handle 获得新 projection；完整 `Theme::change(...)` 会自行同步。
+通过 `Theme::update(cx, |theme| ...)` 修改 GPUI Component 的 global theme。theme 里同一份颜色存了两次（`colors` 是纯色，`tokens` 是可带渐变的可绘制背景），Base 层还持有一份给 scrollbar 与 resize handle 的 projection；`update` 在闭包结束后把三份重新对齐并刷新所有窗口。通过 `Theme::global_mut(cx)` 修改只会改到你碰的那个字段——侧栏可能用新 colors 画文字、用旧 tokens 画背景——剩下的要自己做：从 `colors` 重新推导 `tokens`、调用 `Theme::sync_base(cx)`、刷新窗口。完整的 `Theme::change(...)` 会自行同步。
 
 向外绘制的 focus ring 需要空间，ancestor `overflow_hidden()` 会裁掉它。优先让布局留出空间；产品确实需要大量 clipping 时，通过 theme focus-ring policy 保留 focused border，不能悄悄消除键盘焦点。
 
@@ -279,9 +279,7 @@ div()
 通过更新 base font 并 refresh window 改变 zoom：
 
 ```rust
-Theme::global_mut(cx).font_size = px(18.);
-Theme::sync_base(cx);
-window.refresh();
+Theme::update(cx, |theme| theme.font_size = px(18.));
 ```
 
 Base font 自身是 px，因为它负责锚定 scale。Descendant application UI 通常使用`text_sm()`、`gap_2()`、`px_3()`、`h_8()`、`size_4()` 等 relative helper，让 type、whitespace、control 与 icon 一起响应。Custom component 如果把 rem-based text 与 fixed-px padding/icon geometry 混合，必须记录为什么该部分不应 zoom。
@@ -453,7 +451,7 @@ Boolean builder 可叫 `disabled(bool)`，reader 叫 `is_disabled()`。含 non-b
 
 - **selected** 是持久 membership/active item；**focused** 是 keyboard target；**hovered** 是 pointer presence；**confirmed** 是 activation result，不能混用。
 - **open/close** 描述 overlay/disclosure state；**show/hide** 表示 transient presentation request；**expand/collapse** 描述结构。
-- **disabled** 禁止交互；**read-only** 允许导航/选择但禁止编辑；**loading** 表示操作中并应防止重复提交。
+- **disabled** 禁止交互；**readonly** 允许导航/选择但禁止编辑；**loading** 表示操作中并应防止重复提交。这个状态一律拼作 `readonly`——一个词，与 `readonly(bool)` builder 和 `is_readonly()` reader 一致——标识符、界面标签和文档中都如此，不写 `read-only` 或 `read only`。
 - **index** 是当前位置；**id** 是稳定 identity；`IndexPath` 是层级位置。重排数据不能用 index 持久化或作为 key。
 - **value** 是 controlled domain data；**presentation** 是 render 用 read-only snapshot；**state** 是 retained behavior。
 - **placement** 是 side/anchor policy；**position** 是 resolved geometry。
