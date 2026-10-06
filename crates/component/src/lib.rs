@@ -1,3 +1,6 @@
+#[cfg(feature = "gpui-fast")]
+extern crate gpui_fast as gpui;
+
 use gpui::App;
 use std::ops::Deref;
 use std::sync::LazyLock;
@@ -77,6 +80,7 @@ pub mod shimmer;
 pub mod sidebar;
 pub mod skeleton;
 pub mod slider;
+pub mod speech;
 pub mod spinner;
 pub mod status_bar;
 pub mod stepper;
