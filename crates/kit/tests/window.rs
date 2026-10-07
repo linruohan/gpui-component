@@ -172,6 +172,23 @@ fn duplicate_local_ids_fail_clearly(cx: &mut TestAppContext) {
     .unwrap();
 }
 
+#[gpui_kit::test]
+fn find_all_returns_every_match_in_scope(cx: &mut TestAppContext) {
+    let (handle, _) = common::open_window(cx, None, |_, cx| cx.new(|_| Duplicate));
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        let all = window.find_all("duplicate");
+        assert_eq!(all.len(), 2);
+        assert_ne!(all[0].path(), all[1].path());
+        assert!(all[0].bounds().top() < all[1].bounds().top());
+        let scoped = window.within("two").find_all("duplicate");
+        assert_eq!(scoped.len(), 1);
+        assert_eq!(scoped[0].path(), all[1].path());
+        assert!(window.find_all("missing").is_empty());
+    })
+    .unwrap();
+}
+
 struct Cached {
     child: gpui_kit::Entity<Example>,
 }
