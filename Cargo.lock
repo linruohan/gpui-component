@@ -3954,6 +3954,7 @@ dependencies = [
  "tree-sitter-yaml",
  "tree-sitter-zig",
  "two-face",
+ "tyme4rs",
  "unicode-segmentation",
  "unicode-width",
  "uuid",
@@ -11491,6 +11492,15 @@ dependencies = [
  "serde",
  "serde_derive",
  "syntect",
+]
+
+[[package]]
+name = "tyme4rs"
+version = "1.5.0"
+source = "git+https://github.com/linruohan/tyme4rs.git#12fc5a797d57e680e1fb3cc8b33a50ba1f9b1e13"
+dependencies = [
+ "lazy_static",
+ "regex",
 ]
 
 [[package]]
