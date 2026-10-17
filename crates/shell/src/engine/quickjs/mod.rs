@@ -3383,6 +3383,85 @@ impl ShellRuntime {
         }
     }
 
+    /// Asks a lazy list's `get_key` for the keys of items by index, from
+    /// inside layout.
+    ///
+    /// What a `list` keeps the reader's place by when its item count changes:
+    /// it remembers the key of the item at the top of the viewport after each
+    /// layout and, once the count has changed, asks for keys around that
+    /// item's old index until it finds where the key went. `ask` is handed the
+    /// lookup and decides how far to go. Once `get_key` throws, every later
+    /// lookup answers `None` without calling it, and the error is logged.
+    ///
+    /// The scope is the item renderer's, for the same reasons: this runs from
+    /// GPUI's layout pass, so [`ScopePhase::Layout`] forbids `cx.notify()` and
+    /// retained state, and nothing is drained afterwards.
+    pub(crate) fn item_keys<R>(
+        self: &Rc<Self>,
+        get_key: CallbackId,
+        window: &mut Window,
+        cx: &mut App,
+        ask: impl FnOnce(&mut dyn FnMut(usize) -> Option<String>) -> R,
+    ) -> Option<R> {
+        let entry = self.callbacks.borrow().get(get_key)?;
+
+        if entry
+            .application
+            .as_ref()
+            .is_some_and(|application| !application.is_active())
+        {
+            tracing::debug!("item key resolver {get_key} belongs to a retired application");
+            return None;
+        }
+
+        let view = entry.live_view()?;
+        let policy = view
+            .as_ref()
+            .map(|view| view.read(cx).policy())
+            .unwrap_or_else(crate::policy::default);
+
+        self.metrics.time_frame_script(|| {
+            let (_guard, _) = scope::enter_with_application(
+                self,
+                window,
+                cx,
+                ScopePhase::Layout,
+                view,
+                policy,
+                entry.application.clone(),
+            );
+            scope::adopt(entry.registered_in);
+
+            let answered = self.with_js(|ctx| {
+                let key_handler = entry.value.clone().restore(ctx)?;
+                let mut failure = None;
+                let answer = ask(&mut |index| {
+                    if failure.is_some() {
+                        return None;
+                    }
+                    match key_handler.call::<_, String>((index,)) {
+                        Ok(key) => Some(key),
+                        Err(error) => {
+                            failure = Some(error);
+                            None
+                        }
+                    }
+                });
+                match failure {
+                    Some(error) => Err(error),
+                    None => Ok(answer),
+                }
+            });
+            match answered {
+                Ok(answer) => Some(answer),
+                Err(error) => {
+                    tracing::error!("error in a list's get_key: {error}");
+                    None
+                }
+            }
+        })
+    }
+
     /// Draws one piece of a dock's chrome.
     ///
     /// The second call into script that runs on a frame's budget rather than an
@@ -3707,8 +3786,27 @@ impl ShellRuntime {
         });
     }
 
-    /// The lifetime checks, scope entry and job drain every row-level dispatch
-    /// shares. The call itself is the caller's, because the two row events
+    /// Reports which items a `list` shows, and how many it has, after a layout
+    /// changed either. Called after the frame rather than from inside it, so
+    /// the handler runs as an event handler does and may change state.
+    pub(crate) fn dispatch_visible_range(
+        self: &Rc<Self>,
+        id: CallbackId,
+        range: std::ops::Range<usize>,
+        count: usize,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.dispatch_item(id, "visible range", window, cx, |ctx, handler, context| {
+            let payload = Object::new(ctx.clone())?;
+            payload.set("start", range.start)?;
+            payload.set("end", range.end)?;
+            handler.call::<_, ()>((payload, count, context))
+        });
+    }
+
+    /// The lifetime checks, scope entry and job drain every list-level
+    /// dispatch shares. The call itself is the caller's, because the events
     /// hand the handler different argument lists.
     fn dispatch_item(
         self: &Rc<Self>,
@@ -6176,7 +6274,8 @@ globalThis.__gpui = (() => {
   });
 
   // The multi-line state shares almost all of its surface with the single-line
-  // one, and adds the three calls that only mean anything once text can wrap.
+  // one, and adds the calls that only mean anything once text has more than
+  // one line.
   const textareaState = (handle) => ({
     ...tokenStateMethods(handle, __textarea_token_call),
     __handle: handle,
@@ -6191,6 +6290,7 @@ globalThis.__gpui = (() => {
         oneBased(max_rows, "set_auto_grow(min_rows, max_rows) max_rows"),
       ),
     set_soft_wrap: (wrap) => __textarea_set_soft_wrap(handle, Boolean(wrap)),
+    set_submit_on_enter: (submit) => __textarea_set_submit_on_enter(handle, Boolean(submit)),
     release: () => __textarea_release(handle),
   });
 
@@ -7189,6 +7289,7 @@ impl ShellRuntime {
                 "keep_mounted",
                 "on_item_click",
                 "on_item_secondary_click",
+                "on_visible_range_change",
                 "on_change",
                 "token",
                 "on_token_click",
@@ -7757,6 +7858,26 @@ impl ShellRuntime {
                     runtime.clone(),
                     descriptor.clone(),
                 )?;
+                let release_runtime = runtime.clone();
+                let kind = descriptor.kind();
+                component_module.set(
+                    format!("{}.release", descriptor.export()),
+                    Func::from(move |ctx: Ctx<'_>, proof: String, handle: u64| -> JsResult<bool> {
+                        let runtime = upgrade(&release_runtime, &ctx)?;
+                        if proof != runtime.component_state_proof {
+                            return Err(js_error::type_error(&ctx, "state belongs to another runtime"));
+                        }
+                        if matches!(scope::current_phase(), Some(ScopePhase::Render | ScopePhase::Layout)) {
+                            return Err(js_error::type_error(&ctx, "state cannot be released during render or layout"));
+                        }
+                        runtime.flush_component_state_releases();
+                        let mut states = runtime
+                            .component_states
+                            .try_borrow_mut()
+                            .map_err(|_| js_error::type_error(&ctx, "state registry is already borrowed"))?;
+                        Ok(states.remove(handle, kind))
+                    }),
+                )?;
                 let state_runtime = runtime.clone();
                 let descriptor = descriptor.clone();
                 component_module.set(
@@ -8126,6 +8247,7 @@ impl ShellRuntime {
             | "on_step"
             | "on_item_click"
             | "on_item_secondary_click"
+            | "on_visible_range_change"
             | "on_mouse_move"
             | "on_hover"
             | "on_key_down"
@@ -10310,6 +10432,7 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
         "on_pinch" => "on_pinch",
         "on_item_click" => "on_item_click",
         "on_item_secondary_click" => "on_item_secondary_click",
+        "on_visible_range_change" => "on_visible_range_change",
         "on_resize" => "on_resize",
         "tab_bar" => "tab_bar",
         "empty_group" => "empty_group",

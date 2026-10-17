@@ -840,6 +840,14 @@ The event names a script can subscribe to are `change`, `submit`, `focus`, and
 `submit` covers base's `InputEvent::PressEnter`. An unknown name reports the
 full valid set.
 
+Base emits `PressEnter` for every Enter, including one a textarea has just
+turned into a line break, so a textarea's `submit` arrives after the break is
+in the text. `TextareaState.set_submit_on_enter(true)` passes through to base's
+`set_submit_on_enter`: Enter then inserts nothing and only submits, and
+Shift+Enter still inserts a line break and is still reported, with
+`shift: true`. The shell does not filter that second `submit`, because base
+reports it and a script may want it; the handler checks `event.shift`.
+
 ### 7.4 Cycles across two garbage collectors
 
 The classic embedded-script leak: Rust holds a script closure, the closure
@@ -2043,7 +2051,10 @@ dependency runs upward only — `"gpui-base"` imports the element and
 component-factory types it is built out of from `"gpui-kit"`, and `"gpui-kit"` refers
 down only where one shared element prototype forces it: `track_scroll`, `mode`,
 `axis` and `cx.theme()` name their argument types with an inline
-`import("gpui-base").X`.
+`import("gpui-base").X`. The component catalog's block is declared under the
+specifier its registry carries (§14.7) — `"gpui-component"` for the shipped
+catalog — and a directory whose scripts import only that specifier gets the
+file too.
 
 What makes the declarations trustworthy is that they are generated from **the
 tables the runtime dispatches through**, not transcribed from documentation:
@@ -2134,7 +2145,13 @@ the one command, and Cargo forbids the dependency cycle a feature on a separate
 crate would have needed. `gpui_shell::init` installs the base layer;
 `gpui_shell::components::init` installs the catalog and then the runtime. A
 host that wants the protocol without the catalog builds `gpui-shell` without
-the feature and gets an empty registry, which declares no module at all.
+the feature and gets an empty registry, which declares no module at all. A host
+that wants the catalog and components of its own calls
+`gpui_shell::components::registry()`, which returns the catalog before it is
+frozen, registers into it, and freezes it; `components()` is that call followed
+by `freeze`. The registry already carries the catalog's initializer and window
+opener. A host whose components need startup of their own replaces the
+initializer with a function that calls `gpui_component::init` first.
 
 **A registry is built, then frozen.** `ComponentRegistry::new(api_version,
 module_specifier)` opens one; `register` and `register_state` add to it;
@@ -2211,7 +2228,11 @@ proof the module stamps on it. The proof comes from `RandomState`'s OS-seeded
 keys: anything a script can observe — a process id, a clock, a counter — would
 be reconstructible, and a forged handle would reach another application's state.
 Retained values are owned by the application generation that created them and
-are released with it.
+are released with it, or earlier when the script calls `release()` on the state
+object. `release()` drops the value and its event subscriptions, returns whether
+the state was still live, and is refused during render and layout like any other
+change to retained state. A method called on it afterwards throws.
+A registered state method may not be named `release`.
 
 A retained state built on the text engine — an `Entity<InputBaseState<M>>`,
 which is what both `gpui-component`'s `InputState` and `TextareaState` are —
